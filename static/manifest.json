@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Chee - Live Chess Analysis",
+  "name": "Chee - Live Eval Chart",
   "version": "2.0.1",
-  "description": "Real-time Stockfish analysis on chess.com and lichess — eval, best moves, classifications, traps, and more",
+  "description": "Live Stockfish eval chart on chess.com and lichess",
   "homepage_url": "https://github.com/hong4rc/chee",
   "permissions": [
     "storage"
@@ -25,7 +25,6 @@
       "matches": [
         "*://www.chess.com/game/*",
         "*://www.chess.com/play/*",
-        "*://www.chess.com/puzzles/*",
         "*://www.chess.com/daily/*",
         "*://lichess.org/*"
       ],

@@ -1,5 +1,5 @@
-// AnalysisCoordinator: mediates between engine, panel, arrow, adapter, and plugins.
-// Owns all orchestration state. Plugins receive lifecycle hooks for extensibility.
+// AnalysisCoordinator: mediates between engine, panel, and adapter.
+// Owns all orchestration state.
 
 import {
   times, constant, forEach,
@@ -7,38 +7,30 @@ import {
 import createDebug, { refreshDebugFlag } from '../lib/debug.js';
 import { LruCache } from '../lib/lru.js';
 import { applyTheme } from '../lib/themes.js';
-import { eventToSquare } from '../lib/dom.js';
 import { boardToFen } from './fen.js';
 import {
   BOARD_SIZE, LAST_RANK,
   DEBOUNCE_MS, POLL_INTERVAL_MS,
-  MAX_PIECE_ATTEMPTS,
+  MAX_PIECE_ATTEMPTS, NUM_LINES,
   TURN_WHITE, TURN_BLACK,
-  EVT_READY, EVT_EVAL, EVT_ERROR, EVT_LINE_HOVER, EVT_LINE_LEAVE, EVT_PGN_COPY,
+  EVT_READY, EVT_EVAL, EVT_ERROR,
 } from '../constants.js';
 
 const log = createDebug('chee:coordinator');
 
 export class AnalysisCoordinator {
   constructor({
-    engine, panel, arrow, adapter, settings, boardState, boardPreview,
+    engine, panel, adapter, settings, boardState,
   }) {
     this._engine = engine;
     this._panel = panel;
-    this._arrow = arrow;
     this._adapter = adapter;
     this._settings = settings;
     this._boardState = boardState;
-    this._boardPreview = boardPreview;
 
     this._evalCache = new LruCache(1024);
     this._debounceTimer = null;
     this._activeFen = null;
-    this._plugins = [];
-    this._persistentLayers = [];
-    this._secondaryAnalysis = null;
-    this._lastEvalData = null;
-    this._dropUntilNewAnalysis = false;
   }
 
   _cacheKey(fen, depth) {
@@ -46,17 +38,11 @@ export class AnalysisCoordinator {
   }
 
   _cacheLookup(fen) {
-    const cached = this._evalCache.get(this._cacheKey(fen, this._settings.searchDepth));
-    if (cached && cached.lines && cached.lines.length >= this._settings.numLines) return cached;
-    return null;
+    return this._evalCache.get(this._cacheKey(fen, this._settings.searchDepth)) || null;
   }
 
-  registerPlugin(plugin) {
-    this._plugins.push(plugin);
-  }
-
-  broadcastToPlugins(eventName, data) {
-    forEach(this._plugins, (p) => p.onPluginEvent(eventName, data));
+  _engineSettings() {
+    return { ...this._settings, numLines: NUM_LINES };
   }
 
   start(boardEl) {
@@ -65,7 +51,6 @@ export class AnalysisCoordinator {
 
     this._panel.mount(this._adapter.getPanelAnchor(boardEl));
     applyTheme(this._panel.el, this._settings.theme);
-    this._panel.setShowChart(this._settings.showChart);
     this._panel.restoreState(
       this._settings.panelMinimized,
       this._settings.panelHidden,
@@ -73,37 +58,14 @@ export class AnalysisCoordinator {
       this._settings.panelTop,
       this._settings.panelWidth,
     );
-    this._arrow.mount(boardEl);
-    this._boardPreview.mount(boardEl);
 
-    // Give plugins access to shared context before any lifecycle hooks fire
-    const setupCtx = {
-      getRenderCtx: () => this._createRenderCtx(),
-      panel: this._panel,
-      adapter: this._adapter,
-      boardState: this._boardState,
-      requestSecondaryAnalysis: (...args) => this.requestSecondaryAnalysis(...args),
-      cancelSecondaryAnalysis: () => this.cancelSecondaryAnalysis(),
-      broadcastToPlugins: (name, data) => this.broadcastToPlugins(name, data),
-    };
-    forEach(this._plugins, (p) => p.setup(setupCtx));
-
-    this._setupListeners(boardEl);
-
-    forEach(this._plugins, (p) => {
-      const layer = p.getPersistentLayer(() => this._createRenderCtx());
-      if (layer) this._persistentLayers.push(layer);
-    });
-
-    this._panel.setLoading(true);
-    this._panel.setMaxDepth(this._settings.searchDepth);
-    this._engine.init(this._settings);
+    this._bindEngineListeners();
+    this._engine.init(this._engineSettings());
     this._adapter.observe(boardEl, () => this._onBoardChange());
 
     const fen = this._readFen();
     log.info('Initial FEN:', fen);
     if (fen) {
-      this._notifyPlugins('onBoardChange', this._boardState, this._createRenderCtx());
       this._activeFen = fen;
       this._engine.analyze(fen);
     } else {
@@ -117,20 +79,10 @@ export class AnalysisCoordinator {
     clearTimeout(this._debounceTimer);
     this._adapter.disconnect();
     this._engine.destroy();
-    forEach(this._plugins, (p) => p.destroy());
-    this._arrow.clear();
-    this._boardPreview.destroy();
     this._panel.destroy();
-    if (this._boardState.boardEl && this._onMouseDown) {
-      this._boardState.boardEl.removeEventListener('mousedown', this._onMouseDown);
-    }
-    if (this._onMouseUp) {
-      document.removeEventListener('mouseup', this._onMouseUp);
-    }
   }
 
   applySettings(newSettings) {
-    const prevNumLines = this._settings.numLines;
     const prevSearchDepth = this._settings.searchDepth;
     Object.assign(this._settings, newSettings);
     log.info('settings changed:', JSON.stringify(newSettings));
@@ -142,16 +94,8 @@ export class AnalysisCoordinator {
     }
 
     if (newSettings.theme && this._panel.el) applyTheme(this._panel.el, this._settings.theme);
-    if ('showChart' in newSettings) this._panel.setShowChart(newSettings.showChart);
 
-    this._notifyPlugins('onSettingsChange', newSettings, this._createRenderCtx());
-
-    const engineChanged = ('numLines' in newSettings && newSettings.numLines !== prevNumLines)
-      || ('searchDepth' in newSettings && newSettings.searchDepth !== prevSearchDepth);
-    if (!engineChanged) return;
-
-    if ('numLines' in newSettings) this._panel.reconfigure(this._settings.numLines);
-    if ('searchDepth' in newSettings) this._panel.setMaxDepth(this._settings.searchDepth);
+    if (!('searchDepth' in newSettings) || newSettings.searchDepth === prevSearchDepth) return;
 
     if (this._activeFen) {
       const cached = this._cacheLookup(this._activeFen);
@@ -161,59 +105,8 @@ export class AnalysisCoordinator {
       }
     }
 
-    // Cache miss — need engine work (more lines or different depth)
-    this._notifyPlugins('onEngineReset');
-    this._engine.reconfigure(this._settings);
+    this._engine.reconfigure(this._engineSettings());
     if (this._activeFen) this._engine.analyze(this._activeFen);
-  }
-
-  replayEval() {
-    if (!this._activeFen) return;
-    const cached = this._cacheLookup(this._activeFen);
-    if (cached) this._notifyPlugins('onEval', cached, this._boardState, this._createRenderCtx());
-  }
-
-  cancelSecondaryAnalysis() {
-    if (!this._secondaryAnalysis) return;
-    const { savedEval } = this._secondaryAnalysis;
-    this._secondaryAnalysis = null;
-    this._dropUntilNewAnalysis = true;
-    this._engine.stop();
-    if (savedEval) {
-      this._applyEval(savedEval);
-    }
-    // Resume main analysis if it wasn't complete
-    if (!savedEval?.complete && this._activeFen) {
-      this._dropUntilNewAnalysis = false;
-      this._engine.forceAnalyze(this._activeFen);
-    }
-  }
-
-  requestSecondaryAnalysis(fen, targetDepth, callback, searchmoves) {
-    if (this._secondaryAnalysis) return;
-    this._secondaryAnalysis = {
-      fen,
-      targetDepth,
-      callback,
-      originalFen: this._activeFen,
-      savedEval: this._lastEvalData,
-    };
-    this._engine.forceAnalyze(fen, searchmoves);
-  }
-
-  _createRenderCtx() {
-    return {
-      panel: this._panel,
-      arrow: this._arrow,
-      boardPreview: this._boardPreview,
-      isFlipped: () => this._adapter.isFlipped(this._boardState.boardEl),
-    };
-  }
-
-  _notifyPlugins(hook, ...args) {
-    forEach(this._plugins, (p) => {
-      if (typeof p[hook] === 'function') p[hook](...args);
-    });
   }
 
   _detectTurnFromHighlights(board) {
@@ -245,57 +138,18 @@ export class AnalysisCoordinator {
     const moveCount = this._adapter.detectMoveCount();
 
     const fen = boardToFen(board, turn, castling, enPassant, moveCount);
-    this._panel.setBoard(board, turn, fen);
+    this._panel.setTurn(turn);
     const ply = this._adapter.detectPly();
     this._boardState.update(board, ply, fen, turn);
     return fen;
   }
 
   _applyEval(data) {
-    this._lastEvalData = data;
-    if (data.complete) {
-      const top = data.lines?.[0];
-      const score = top?.mate !== null ? `M${top.mate}` : top?.score;
-      log.info('eval complete — depth:', data.depth, `score: ${score} pv: ${top?.pv?.[0]}`);
-    }
-    this._panel.updateEval(data);
-    this._notifyPlugins('onEval', data, this._boardState, this._createRenderCtx());
     this._panel.recordScore(this._boardState.ply, data);
   }
 
   _onEvalData(data) {
-    if (this._secondaryAnalysis) {
-      const sa = this._secondaryAnalysis;
-      if (this._engine.currentFen === sa.fen) {
-        // Clear before callback so the callback can chain another request
-        const done = data.complete || data.depth >= sa.targetDepth;
-        if (done) this._secondaryAnalysis = null;
-        sa.callback(data);
-        // Stop leftover searchmoves analysis and restore previous eval
-        if (done && !this._secondaryAnalysis) {
-          this._dropUntilNewAnalysis = true;
-          this._engine.stop();
-          if (sa.savedEval) {
-            this._applyEval(sa.savedEval);
-            // If main analysis wasn't complete, resume it
-            if (!sa.savedEval.complete && this._activeFen) {
-              this._dropUntilNewAnalysis = false;
-              this._engine.forceAnalyze(this._activeFen);
-            }
-          } else if (this._activeFen) {
-            this._dropUntilNewAnalysis = false;
-            this._engine.forceAnalyze(this._activeFen);
-          }
-        }
-        return;
-      }
-      // Board changed during secondary — abort silently
-      this._secondaryAnalysis = null;
-    }
-
     if (this._engine.currentFen !== this._activeFen) return;
-    // Drop all evals from a stopped searchmoves analysis until board changes
-    if (this._dropUntilNewAnalysis) return;
     this._applyEval(data);
     this._evalCache.set(this._cacheKey(this._activeFen, data.depth), data);
   }
@@ -303,14 +157,9 @@ export class AnalysisCoordinator {
   _onBoardChange() {
     clearTimeout(this._debounceTimer);
     this._debounceTimer = setTimeout(() => {
-      this._boardPreview.clear();
-      this._boardPreview.invalidate();
       const fen = this._readFen();
       if (!fen) return;
       log.info('board change — ply:', this._boardState.ply, 'turn:', this._boardState.turn, 'fen:', fen);
-      this._secondaryAnalysis = null;
-      this._dropUntilNewAnalysis = false;
-      this._notifyPlugins('onBoardChange', this._boardState, this._createRenderCtx());
       this._activeFen = fen;
 
       const cached = this._cacheLookup(fen);
@@ -326,7 +175,6 @@ export class AnalysisCoordinator {
   _bindEngineListeners() {
     this._engine.on(EVT_READY, () => {
       log.info('Engine ready');
-      this._panel.setLoading(false);
       // After crash recovery, ensure we're analyzing the current position
       if (this._activeFen && this._engine.currentFen !== this._activeFen) {
         this._engine.analyze(this._activeFen);
@@ -334,54 +182,6 @@ export class AnalysisCoordinator {
     });
     this._engine.on(EVT_EVAL, (data) => this._onEvalData(data));
     this._engine.on(EVT_ERROR, (msg) => { log.error('Engine error:', msg); });
-  }
-
-  _setupListeners(boardEl) {
-    this._panel.on(EVT_LINE_HOVER, (moves, turn) => {
-      forEach(this._persistentLayers, (l) => l.clear());
-      const isFlipped = this._adapter.isFlipped(boardEl);
-      this._arrow.draw(moves, turn, isFlipped);
-      if (this._boardState.board && moves.length > 0) {
-        const previewMoves = this._settings.previewLastMove ? moves : moves.slice(0, -1);
-        if (previewMoves.length > 0) {
-          this._boardPreview.show(
-            this._boardState.board,
-            previewMoves,
-            isFlipped,
-            this._adapter,
-          );
-        } else {
-          this._boardPreview.clear();
-        }
-      }
-    });
-    this._panel.on(EVT_LINE_LEAVE, () => {
-      this._arrow.clear();
-      this._boardPreview.clear();
-      forEach(this._persistentLayers, (l) => l.restore());
-    });
-    this._panel.on(EVT_PGN_COPY, () => {
-      const renderCtx = this._createRenderCtx();
-      forEach(this._plugins, (p) => p.onPanelEvent(EVT_PGN_COPY, renderCtx));
-    });
-    this._bindEngineListeners();
-
-    this._onMouseDown = (e) => {
-      const isFlipped = this._adapter.isFlipped(boardEl);
-      const sq = eventToSquare(e, boardEl, isFlipped);
-      if (!sq) return;
-      const { board, turn } = this._boardState;
-      if (!board || !turn) return;
-      const renderCtx = this._createRenderCtx();
-      forEach(this._plugins, (p) => p.onBoardMouseDown(sq, board, turn, renderCtx));
-    };
-    this._onMouseUp = () => {
-      const renderCtx = this._createRenderCtx();
-      forEach(this._plugins, (p) => p.onBoardMouseUp(renderCtx));
-    };
-
-    boardEl.addEventListener('mousedown', this._onMouseDown);
-    document.addEventListener('mouseup', this._onMouseUp);
   }
 
   _waitForPieces() {
@@ -399,7 +199,6 @@ export class AnalysisCoordinator {
       if (fen) {
         log.info('Pieces appeared! FEN:', fen);
         clearInterval(pieceInterval);
-        this._notifyPlugins('onBoardChange', this._boardState, this._createRenderCtx());
         this._activeFen = fen;
         this._engine.analyze(fen);
         return;

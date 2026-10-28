@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Chee is a Chrome extension (Manifest v3) that provides real-time Stockfish analysis on chess.com and lichess.org. It reads the board DOM, generates a FEN, runs Stockfish via WebAssembly in a Web Worker, and renders an analysis panel beside the board. Also supports puzzle/hint pages on both sites (chess.com: rated, rush, battle, learning, daily; lichess: training, storm, racer, streak) in a lightweight arrow-only hint mode.
+Chee is a Chrome extension (Manifest v3) that provides real-time Stockfish analysis on chess.com and lichess.org. It reads the board DOM, generates a FEN, runs Stockfish via WebAssembly in a Web Worker, and renders an eval chart panel beside the board.
 
 ## Commands
 
@@ -67,8 +67,8 @@ Line endings are enforced as LF on all platforms via `.gitattributes`.
 ## Architecture
 
 **Two entry points** bundled by Rollup:
-- `src/content.js` — injected into chess pages, orchestrates board reading → FEN → engine → panel. Uses a data-driven `HINT_PAGES` config array to detect hint pages (chess.com puzzles/daily + lichess training/storm/racer/streak). First-match-wins URL matching, hint mode applies fixed depth 15, no panel, best move arrow only. Daily toggle live-controls the arrow.
-- `src/popup.js` — extension popup with tabbed UI: Settings (lines, depth, theme, toggles with icons, debug) and Puzzles (two-column grid: chess.com + lichess toggles). Checkboxes auto-wired via `data-key` attributes to `chrome.storage`.
+- `src/content.js` — injected into chess pages, orchestrates board reading → FEN → engine → chart panel.
+- `src/popup.js` — extension popup: theme, search depth, debug toggle, copy debug info. Checkboxes auto-wired via `data-key` attributes to `chrome.storage`.
 
 **Adapter pattern** for multi-site support:
 - `adapters/base.js` — abstract `BoardAdapter` interface (findBoard, readPieces, detectTurn, etc.)
@@ -77,34 +77,16 @@ Line endings are enforced as LF on all platforms via `.gitattributes`.
 - `adapters/factory.js` — hostname-based auto-detection, returns the right adapter
 
 **Core modules:**
-- `core/engine.js` — Stockfish worker lifecycle (state machine: IDLE→INITIALIZING→READY→ANALYZING), UCI protocol, auto-recovery with max 2 retry attempts per crashing position. Supports `searchmoves` parameter for restricted move analysis.
-- `core/panel.js` — panel DOM creation and updates (eval display, W/D/L bar, opening name, analysis lines, score chart, accuracy, trap status), extends `lib/emitter.js` for events
-- `core/arrow.js` — SVG arrow overlay (analysis arrows, classification badges, hint arrows, insight arrows, guard badges, trap arrows)
-- `core/board-diff.js` — board diff → UCI move detection (`detectMoveFromBoards()`, `boardDiffToUci()`), shared by classifier, PGN plugin, and trapboy
-- `core/attacks.js` — pure utility: `isSquareAttacked(board, file, rank, byColor)` checks if a square is attacked by a given color
-- `core/classify.js` — pure classification logic: `computeCpLoss()` and `classify()`
-- `core/insight.js` — tactical insight detection for Mistake/Blunder (right piece, right square, delayed move)
-- `core/move-classifier.js` — classification state machine, accuracy tracking, ply cache
-- `core/openings.js` — 193-entry ECO opening lookup by FEN position
-- `core/opening-traps.js` — 10-entry opening trap database (Noah's Ark, Legal, Elephant, Lasker, Rubinstein, Siberian, Fajarowicz, Blackburne Shilling, Englund Gambit, Fishing Pole). FEN-keyed Map lookup, auto-labeled steps (Bait/Greed/Punish)
-- `core/fen.js` / `core/san.js` — FEN generation, PV-to-SAN conversion, `sanToUci()` reverse conversion, `generateMovesFromSquare()` for pseudo-legal move generation
-- `core/board-preview.js` — HTML overlay for showing predicted board positions on hover. Renders piece images (read from site's own CSS via `getComputedStyle`) and board-colored square masks. Caches metrics, board background, and piece images for performance.
-- `core/coordinator.js` — mediates between engine, panel, arrow, adapter, board preview, and plugins; owns orchestration state; highlight-based turn detection fallback for puzzle pages. Decoupled from plugins — plugins self-register events in `setup()`. Provides `requestSecondaryAnalysis` (with `searchmoves` support) and `cancelSecondaryAnalysis` for plugins. Secondary analysis isolation via `savedEval` + `_dropUntilNewAnalysis`.
+- `core/engine.js` — Stockfish worker lifecycle (state machine: IDLE→INITIALIZING→READY→ANALYZING), UCI protocol, auto-recovery with max 2 retry attempts per crashing position. Runs with MultiPV 1 (`NUM_LINES`).
+- `core/panel.js` — panel DOM (header with hide/minimize, eval chart, resize handle), drag/resize/position tracking
+- `core/renderers/chart-renderer.js` — SVG eval chart
+- `core/renderers/header-renderer.js` — panel header (drag handle + controls)
+- `core/coordinator.js` — mediates between engine, panel, and adapter; eval LRU cache keyed by `fen|depth`; highlight-based turn detection fallback.
 - `core/board-state.js` — value object: board array, ply, FEN, turn; diff-based turn detection
-- `core/plugin.js` — base `AnalysisPlugin` class (lifecycle hooks: `setup`, `onBoardChange`, `onEval`, `onSettingsChange`, `onEngineReset`, `onBoardMouseDown`, `onBoardMouseUp`, `onPanelEvent`, `onPluginEvent`)
-- `core/renderers/header-renderer.js` — generic slot system (`setSlot`/`clearSlot`) for plugin UI in the panel header
-
-**Plugins** (`core/plugins/`):
-- `classification-plugin.js` — move classification (Brilliant → Blunder), board badge + insight arrow. Self-wires classifier events in `setup()`, broadcasts `classification:lock` for PGN.
-- `hint-plugin.js` — pre-move hint arrows (classification-based spread or always-on best move). Waits for engine to reach full depth before drawing when `waitForComplete` is enabled (default on) or in puzzle mode.
-- `pgn-plugin.js` — PGN export with eval comments and NAG codes. Reads move list, player names, and game result from adapter DOM at export time; falls back to board-diff tracking. Receives classifications via `onPluginEvent('classification:lock')`.
-- `guard-plugin.js` — move guard: on mousedown, runs shallow `searchmoves` analysis on all candidate moves from the picked-up piece, marks bad destination squares (cpLoss > threshold) with `!` badges. Uses `requestSecondaryAnalysis` with `searchmoves`.
-- `book-plugin.js` — book move detection and continuation arrows from ECO opening database
-- `trapboy-plugin.js` — trap detection via three methods: sacrifice detection, tempting capture detection, and opening trap database lookup. Uses generic panel slots and `requestSecondaryAnalysis`.
+- `core/fen.js` — FEN generation
 
 **Shared utilities** (`lib/`):
-- `lib/dom.js` — DOM helpers: `el()`, `svgEl()`, `indexOfNode()`, `eventToSquare(e, boardEl, isFlipped)` (mouse event → `{ file, rank }`, works on both sites)
-- `lib/uci.js` — `parseUci(uciMove)` → `{ fromFile, fromRank, toFile, toRank, promotion }`
+- `lib/dom.js` — DOM helpers: `el()`, `svgEl()`, `indexOfNode()`
 - `lib/emitter.js` — simple event emitter mixin
 - `lib/debug.js` — `createDebug('chee:namespace')` wrapper. Always-on ring buffer (`getLogBuffer()`) stores last 200 log entries regardless of debug mode. `refreshDebugFlag()` re-parses `localStorage.debug` for same-tab updates.
 - `lib/format.js` — shared eval formatters: `advantageCls()`, `formatMate()`, `formatCp()`
@@ -113,7 +95,7 @@ Line endings are enforced as LF on all platforms via `.gitattributes`.
 - `lib/settings.js` — Chrome storage load/save
 - `lib/poll.js` — `pollUntil()` async polling helper
 
-**Flow:** MutationObserver detects board change → 100ms debounce → adapter reads pieces + turn → FEN built → engine analyzes → panel + arrows update.
+**Flow:** MutationObserver detects board change → 100ms debounce → adapter reads pieces + turn → FEN built → engine analyzes → chart records the score at the current ply.
 
 ## Key Conventions
 
@@ -129,12 +111,11 @@ Line endings are enforced as LF on all platforms via `.gitattributes`.
 - **Commit style**: Conventional Commits (`feat:`, `fix:`, `refactor:`)
 - **No co-author** lines in commits
 - **Data-driven popup**: checkbox toggles use `data-key` attributes auto-wired to `chrome.storage` — adding a toggle requires only HTML
-- **Plugin architecture**: plugins self-register in `setup()`, use generic panel slots (`setSlot`/`clearSlot`), communicate via `broadcastToPlugins`/`onPluginEvent`
-- **Real-time settings**: plugins handle ON/OFF in `onSettingsChange(settings, renderCtx)` — clear visuals on toggle-off, restore from cached data on toggle-on. No broadcast replay patterns.
+- **Real-time settings**: `coordinator.applySettings()` applies changes live, no page reload
 
 ## Static Assets (not bundled)
 
-`static/stockfish-worker.js`, `stockfish.js`, `stockfish.wasm` are loaded at runtime via `chrome.runtime.getURL()`. Rollup copies them to `dist/` via the copy plugin. The worker supports `searchmoves` in the `go` command (passed via `MSG_POSITION.searchmoves`) and temporarily raises MultiPV when `searchmoves.length > NUM_LINES`.
+`static/stockfish-worker.js`, `stockfish.js`, `stockfish.wasm` are loaded at runtime via `chrome.runtime.getURL()`. Rollup copies them to `dist/` via the copy plugin.
 
 ## Common Pitfalls & Fixes
 
@@ -142,11 +123,10 @@ Line endings are enforced as LF on all platforms via `.gitattributes`.
 
 Chess sites update DOM elements (clocks, move lists, highlights) at unpredictable times relative to piece positions. This causes:
 
-- **Turn detection wrong**: `detectTurn()` reads clock/move-list DOM, but these may not have updated when the MutationObserver fires on piece movement. Fix: `detectTurnFromDiff()` in `content.js` compares previous board array to current — if a white piece arrived, it's black's turn. Falls back to highlight-based detection (check piece color at the `to` square of the last move highlight), then to adapter `detectTurn()` for initial position or large jumps (>4 squares changed). The highlight fallback is essential for puzzle pages which have no clocks or move list.
-- **Move detection wrong**: Highlight squares (`square-XY` on chess.com, `square.last-move` on lichess) can flicker, producing ghost moves like `e2f7`. Fix: `boardDiffToUci()` in `core/board-diff.js` diffs previous/current board arrays — handles normal moves, captures, castling, en passant, and promotion.
+- **Turn detection wrong**: `detectTurn()` reads clock/move-list DOM, but these may not have updated when the MutationObserver fires on piece movement. Fix: `detectTurnFromDiff()` in `core/board-state.js` compares previous board array to current — if a white piece arrived, it's black's turn. Falls back to highlight-based detection (check piece color at the `to` square of the last move highlight), then to adapter `detectTurn()` for initial position or large jumps (>4 squares changed).
 - **Move count wrong**: Adapter counts all moves in the DOM move list, but during game review the user may be at an earlier position. Fix: find the selected/active move node first, count up to that index. Selector varies by site (chess.com: `.node-highlight-content.selected`; lichess: `kwdb.a1t` / `.tview2 move.active`).
 
-**Rule of thumb for new adapters**: implement `readPieces()`, `isFlipped()`, and `detectPly()` accurately. Turn detection and move detection are handled by the board-diff layer in `core/board-diff.js` and `move-classifier.js` — adapter-level `detectTurn()` is only a fallback. `detectPly()` is critical for distinguishing new moves from backward navigation (revert).
+**Rule of thumb for new adapters**: implement `readPieces()`, `isFlipped()`, and `detectPly()` accurately. Turn detection is handled by `BoardState.detectTurnFromDiff()` — adapter-level `detectTurn()` is only a fallback. `detectPly()` sets the chart's x position for each score.
 
 ### chess.com DOM structure (as of 2025)
 
@@ -168,159 +148,9 @@ Chess sites update DOM elements (clocks, move lists, highlights) at unpredictabl
 - **Never use printf format strings** (`%s`, `%d`) — the debug library prepends a `[namespace]` tag as the first `console.log` argument, which shifts format strings to position 2 where they print literally. Use comma-separated args with inline objects instead.
 - Debug toggle in popup sets `localStorage.debug = 'chee:*'`; Chrome DevTools can filter by level (info/warn/error)
 
-## Panel Features
+## Eval Chart
 
-The analysis panel displays (top to bottom): header (classification badge, eval score, depth), opening name, insight text, plugin slots (generic via `setSlot`/`clearSlot`), W/D/L bar with percentages, analysis lines, eval chart, status bar (accuracy, PGN button, FEN button).
-
-### W/D/L bar
-
-Three-segment bar showing Win/Draw/Loss percentages. Uses sigmoid model: `winRaw = 1 / (1 + exp(-0.00368208 * cp))` with Gaussian draw component. Mate → 100/0/0 or 0/0/100.
-
-### Opening name
-
-`core/openings.js` — 193-entry ECO lookup Map keyed by first two FEN fields (position + turn). Shows opening name below the header row. Hidden for starting position or unknown positions.
-
-### Eval score chart
-
-SVG area chart plotting white-perspective eval at each ply. Togglable via popup (`showChart`, default on). White area fills from bottom up to the score line (more white = white winning). Dark background = black's territory. Orange cursor line marks current ply. Scores clamped to ±500cp, mate = ±500. Updates live as engine depth increases, persists through navigation.
-
-### Accuracy tracker
-
-Running accuracy percentage in the status bar. Formula: `103.1668 * exp(-0.04354 * acpl) - 3.1668` (chess.com style). Updates when classifications lock. Only visible when `showClassifications` is enabled.
-
-### Per-line scores
-
-Each analysis line shows its own eval score badge (cp or mate) next to the rank number. Lines are bordered cards with hover highlight.
-
-### PGN export
-
-`core/plugins/pgn-plugin.js` — accumulates evals and classifications during analysis. Click PGN button in status bar → copies annotated PGN to clipboard.
-
-**Two export strategies** (selected at export time):
-1. **DOM-based** (preferred): `adapter.readMoveList()` provides the complete move list from the site's DOM, so PGN includes all moves from move 1 even when analysis started mid-game. `adapter.readPlayerNames()` and `adapter.readGameResult()` provide real player names and game result.
-2. **Diff-based** (fallback): when no DOM move list is available (e.g. puzzle pages), uses `boardDiffToUci()` + `uciToSan()` to record moves observed during analysis.
-
-Evals and classifications are overlaid on moves by ply index regardless of strategy.
-
-**PGN spec compliance:**
-- Seven Tag Roster (STR) in required order: Event, Site, Date, Round, White, Black, Result
-- Move numbers as separate tokens (`1.` not `1. e4`); black move number (`1...`) repeated after annotations
-- NAG codes only — no inline classification symbols (`$4` not `e4??`)
-- Movetext lines wrapped under 80 characters
-- Game termination marker matches Result tag
-- Mid-game loads include `[SetUp "1"]` and `[FEN "..."]` headers when the starting position differs from standard
-
-## Move Classification
-
-`core/move-classifier.js` — compares eval before/after each move to classify moves. Shows symbol badge on board square + badge in panel header. Togglable via popup (default off).
-
-- `core/classify.js` — pure classification logic: `computeCpLoss()` and `classify()`
-- Classification labels defined as `LABEL_*` constants in `constants.js`
-- Board diff detects played move (no DOM highlight dependency)
-- Classification starts at depth 10 (panel badge only), locks at depth 16 (board icon appears)
-- Both `prevEval` and current eval must have `depth >= CLASSIFICATION_MIN_DEPTH` — shallow evals produce false classifications
-- Tiers: Brilliant (`!!`, teal, cpLoss ≤ −50 and not engine's #1), Crazy (`!?`, purple, sacrifice ≥ 3 material and cpLoss ≤ 30), Best (`★`, green, engine's PV[0]), Excellent (`✓`, green, ≤10cp), Good (muted green, ≤30), Inaccuracy (`?!`, yellow, ≤80), Mistake (`✕`, orange, ≤200), Blunder (`??`, red, >200)
-
-### Insight arrows
-
-For Mistake/Blunder moves, a **dashed arrow** always shows the engine's best move on the board (what the player should have played). Uses `chee-insight-el` class so it persists during line hover. Drawn at lock depth alongside the classification badge. Cached and restored on revert navigation.
-
-### Pre-move hints
-
-Two modes (can both be active):
-1. **Classification hints** — when `showClassifications` is enabled and engine finds a clearly best move (score spread ≥ 80cp between line 1 and 2), shows a badged arrow. ≥200cp → Brilliant hint (teal), ≥80cp → Excellent hint (green). Requires depth ≥ 14.
-2. **Best move arrow** — when `showBestMove` is enabled, always shows PV[0] as a team-colored arrow (blue for white, orange for black). No badge.
-
-### Move guard (per-square blunder warning)
-
-`core/plugins/guard-plugin.js` — on mousedown, runs a shallow `searchmoves` analysis on all pseudo-legal moves from the picked-up piece. Marks destination squares where cpLoss > `GUARD_CP_THRESHOLD` (100cp) with a red `!` badge. Togglable via popup (`showGuard`, default on).
-
-**How it works:**
-1. Mousedown → `eventToSquare()` resolves clicked square → `generateMovesFromSquare()` from `san.js` generates all candidate UCI moves
-2. `requestSecondaryAnalysis(fen, GUARD_DEPTH, callback, moves)` sends `go depth 8 searchmoves ...` to the engine
-3. Worker temporarily raises MultiPV to cover all candidate moves (`tempMultiPV`), restores after `bestmove`
-4. Callback fires when `data.complete` — compares each line's score to `_latestEval` (global best). Moves with cpLoss > threshold → `arrow.drawGuardBadges()` renders `!` badges
-5. Moves not in results (MultiPV partial fill at shallow depth) are treated as bad
-6. Mouseup → `cancelSecondaryAnalysis()` clears badges, restores `savedEval` to panel
-
-**Secondary analysis isolation:** The guard analyzes the same FEN with `searchmoves`, so leftover evals could contaminate the main pipeline. Prevented by: `savedEval` (snapshot before secondary), `_dropUntilNewAnalysis` flag (drops all evals until board changes or engine resumes), and `cancelSecondaryAnalysis()` which stops the engine and restores state.
-
-### Trapboy (trap detection)
-
-`core/plugins/trapboy-plugin.js` — detects traps via three methods: sacrifice detection, tempting capture detection, and opening trap database. Togglable via popup (`showTrapboy`, default off).
-
-**Method 1 — Sacrifice detection (engine-based):**
-1. **Phase 1 (depth ≥ 12):** Scans engine PV lines for sacrifice candidates. For each line, applies the first move (`sacrificeUci`) and checks if the destination piece is attacked by the opponent. Filters require:
-   - Bait piece value ≥ `TRAPBOY_MIN_SACRIFICE_VALUE` (1)
-   - Bait value ≥ capturer value (capture must be tempting — no human trades a knight for a pawn)
-   - Opponent's best response (`godModeUci`) is NOT the greedy capture (otherwise it's not a trap)
-2. **Phase 2 (depth 8):** Requests secondary analysis of the position after sacrifice + greedy capture. If the score ≥ `TRAPBOY_TRAP_THRESHOLD` (200cp), and the first punishment move doesn't recapture on the bait square (must be non-obvious), the trap is confirmed.
-
-**Method 2 — Tempting capture detection (human-oriented):**
-Scans for hanging opponent pieces that the engine rejects capturing — models human behavior (humans take free pieces). `findTemptingCaptures()` finds pieces where target value ≥ capturer value, sorted by value. For each tempting capture not in engine's top lines, requests secondary analysis. If the resulting position is winning (≥ threshold) and punishment isn't a simple recapture, the trap is confirmed. This catches traps like the Lasker Trap where Bxb4 looks like a free bishop but leads to disaster.
-
-**Method 3 — Opening trap database:**
-`core/opening-traps.js` stores 10 famous opening traps (Noah's Ark, Legal, Elephant, Lasker, Rubinstein, Siberian, Fajarowicz, Blackburne Shilling, Englund Gambit, Fishing Pole). On each `onBoardChange`, `lookupOpeningTrap(fen)` checks the current position against the FEN-keyed Map (O(1) lookup using position + turn). Instant activation without engine analysis. Panel shows the trap name.
-
-**Move validation:** Before confirming, `validateMoveSequence()` simulates the full step sequence with `applyUciMove()`, checking each source square has a piece.
-
-**Trap tracking:** Once confirmed, `_trapData` stores the full step sequence (`steps[]` with `uci` + `label`, `stepIndex`, `godUci`, `startPly`, optional `name`). On each `onBoardChange`:
-- Forward move matching `steps[stepIndex].uci` → advance `stepIndex`, redraw arrows/panel
-- Forward move not matching → clear trap (player deviated)
-- Backward navigation within trap range → revert `stepIndex` (take-back friendly)
-- Navigation before trap start → clear trap
-
-**Panel display:** Shows status throughout: "Searching..." → "Verifying..." → "No trap" or trap steps. Shows trap name (e.g., "Legal Trap") for database traps, "TRAP" for engine-detected traps. Steps show with `.chee-trapboy-done` (dimmed/strikethrough) for completed steps and `.chee-trapboy-active` (bold/underline) for the current step.
-
-**Arrow layers:** Four persistent layers: `trapboy-bait` (magenta, your bait move), `trapboy-opponent` (amber dashed, opponent's expected response), `trapboy-greed` (red, punishment moves), `trapboy-god` (green dashed, opponent's safe escape — only for engine-detected traps). Layers update as steps advance.
-
-**Key utility:** `core/attacks.js` provides `isSquareAttacked()` for checking if a piece is hanging after a move.
-
-### Board preview (move hover visualization)
-
-`core/board-preview.js` — shows predicted board positions when hovering analysis line moves or trapboy steps. Always active for preceding moves. The `previewLastMove` setting (default off) controls whether the hovered move itself is also rendered on the board or shown as arrow only.
-
-**How it works:** Creates an HTML overlay div (`#chee-board-preview`, z-index 998) positioned over the board. On hover:
-1. Applies the hovered UCI move sequence via `applyUciMove()` to get the target board state
-2. Diffs current board vs. target board (64-square scan)
-3. For each changed square: renders a **square mask** (board background or fallback light/dark color) to cover the original piece, then a **piece image** on top if a piece exists in the new state
-
-**Piece images** are read from the site's own piece elements via `getComputedStyle(el).backgroundImage` (adapter method `getPieceImageMap()`). This ensures pieces match the site's current theme/piece set regardless of chess.com or lichess.
-
-**Board background** is detected by walking up the DOM from the board element looking for a `backgroundImage` in computed styles. Falls back to standard board colors (`#f0d9b5` / `#b58863`).
-
-**Performance:** All expensive operations are cached — piece images (once per mount), board background (once per mount), board metrics/position (invalidated on board change). Redundant `show()` calls with the same moves are skipped via `_lastMovesKey` deduplication.
-
-**Hover gap handling:** When the mouse moves between spans within a line or trapboy panel, the preview persists instead of flickering. Analysis lines ignore `mouseover` events that don't target a `.chee-move` span. Trapboy uses container-level `mouseleave` on the `.chee-trapboy` wrapper instead of per-span `mouseleave`.
-
-**Integration points:**
-- **Analysis lines**: Coordinator listens to `EVT_LINE_HOVER` → calls `boardPreview.show()`. `EVT_LINE_LEAVE` → `boardPreview.clear()`.
-- **Trapboy steps**: Plugin adds `mouseenter` on each future step span, `mouseleave` on the wrapper. Uses `getRenderCtx().boardPreview` to render.
-
-### Move revert / navigation detection
-
-`detectPly()` in each adapter returns the half-move index from the active move in the DOM move list. The classifier only treats a board diff as a played move when `ply > _prevPly`. Backward navigation restores the cached classification for that ply (panel badge + board icon + insight arrow).
-
-## Puzzle / Hint Mode
-
-Hint pages are defined in a data-driven `HINT_PAGES` config array in `content.js`. Each entry has `{ pattern, key, label, daily? }`. First match wins (specific patterns before general ones). To add a new hint page: add one entry to `HINT_PAGES`, a toggle in `popup.html`, and a default in `constants.js`.
-
-**Supported hint pages:**
-- **chess.com**: `/puzzles` (rated), `/puzzles/rush`, `/puzzles/battle`, `/puzzles/learning`, `/daily`
-- **lichess**: `/training`, `/storm`, `/racer`, `/streak`
-
-Each page type has its own enable toggle (all default off except `enableDaily`).
-
-When a hint page is detected and the corresponding toggle is on:
-- **No panel** — the analysis panel is mounted but hidden (`display: none`)
-- **Forced overrides**: `numLines=1`, `searchDepth=15`, `showBestMove=true`, `showClassifications=false`, `showChart=false`, `showGuard=false`, `showCrazy=false`
-- Only `HintPlugin` is registered (no classification, PGN, guard plugins)
-- Turn detection uses highlight-based fallback (`_detectTurnFromHighlights`) since puzzles lack clocks and move lists
-- Storage changes to forced keys are filtered out so popup changes don't override hint overrides
-
-**Daily chess** (`/daily/*`): The `enableDaily` toggle in the popup live-toggles the arrow: off clears it immediately, on replays the cached eval via `coordinator.replayEval()` so the arrow reappears without re-analysis.
-
-The popup has a **Puzzles** tab with a two-column grid (chess.com / lichess) for hint toggles.
+SVG area chart plotting white-perspective eval at each ply. White area fills from bottom up to the score line (more white = white winning). Dark background = black's territory. Orange cursor line marks current ply. Scores clamped to ±500cp, mate = ±500. Updates live as engine depth increases, persists through navigation. Hover shows a tooltip with move number and score.
 
 ## Theme System
 

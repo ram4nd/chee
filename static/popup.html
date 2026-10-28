@@ -22,42 +22,12 @@
       font-weight: 400;
       color: var(--chee-subtext0);
     }
-    .tab-bar {
-      display: flex;
-      gap: 0;
-      margin-bottom: 10px;
-      border-bottom: 1px solid var(--chee-surface1);
-    }
-    .tab-btn {
-      flex: 1;
-      padding: 5px 0;
-      background: none;
-      border: none;
-      border-bottom: 2px solid transparent;
-      color: var(--chee-overlay0);
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: color 0.15s, border-color 0.15s;
-    }
-    .tab-btn:hover { color: var(--chee-text); }
-    .tab-btn.active {
-      color: var(--chee-green);
-      border-bottom-color: var(--chee-green);
-    }
-    .tab-content { display: none; }
-    .tab-content.active { display: block; }
     label {
       display: block;
       margin-bottom: 4px;
       font-weight: 500;
       font-size: 13px;
       color: var(--chee-subtext0);
-    }
-    .toggle-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 2px 10px;
     }
     .btn-group {
       display: flex;
@@ -144,17 +114,6 @@
       margin: 0;
       flex: 1;
     }
-    .engine-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 2px 10px;
-    }
-    .engine-grid label {
-      margin-bottom: 2px;
-    }
-    .engine-grid .btn-group {
-      margin-bottom: 6px;
-    }
     .copy-debug-btn {
       width: 100%;
       padding: 5px 0;
@@ -176,169 +135,40 @@
       color: var(--chee-green);
       border-color: var(--chee-green);
     }
-    .puzzle-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0 12px;
-    }
-    .puzzle-col-header {
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--chee-overlay0);
-      margin-bottom: 5px;
-      padding-bottom: 2px;
-      border-bottom: 1px solid var(--chee-surface1);
-    }
-    .puzzle-grid .chee-toggle-row {
-      margin-bottom: 4px;
-    }
   </style>
 </head>
 <body>
   <h3>Chee <span id="chee-version"></span></h3>
 
-  <div class="tab-bar">
-    <button class="tab-btn active" data-tab="tab-settings">Settings</button>
-    <button class="tab-btn" data-tab="tab-puzzles">Puzzles</button>
+  <div class="theme-row">
+    <label>Theme</label>
+    <select id="theme-select">
+      <option value="site">Match Site</option>
+      <option value="latte">Latte</option>
+      <option value="frappe">Frappé</option>
+      <option value="macchiato">Macchiato</option>
+      <option value="mocha">Mocha</option>
+    </select>
   </div>
 
-  <div id="tab-settings" class="tab-content active">
-    <div class="chee-section-header">Analysis</div>
+  <div class="chee-section-header">Engine</div>
 
-    <div class="toggle-grid">
-      <label class="chee-toggle-row" title="Show move quality badges (Brilliant, Best, Blunder, etc.)">
-        <input type="checkbox" data-key="showClassifications">
-        <span class="icon">&#9733;</span> Classify
-      </label>
-
-      <label class="chee-toggle-row" title="Always show arrow for engine's top move">
-        <input type="checkbox" data-key="showBestMove">
-        <span class="icon">&#10132;</span> Best move
-      </label>
-
-      <label class="chee-toggle-row" title="Warn when clicked piece isn't in any top line">
-        <input type="checkbox" data-key="showGuard">
-        <span class="icon">&#128737;</span> Guard
-      </label>
-
-      <label class="chee-toggle-row" title="Show opening name and book continuation arrows">
-        <input type="checkbox" data-key="showBookMoves">
-        <span class="icon">&#128214;</span> Book moves
-      </label>
-
-      <label class="chee-toggle-row" title="Highlight wild sacrifices that maintain advantage">
-        <input type="checkbox" data-key="showCrazy">
-        <span class="icon">&#9889;</span> Crazy
-      </label>
-
-      <label class="chee-toggle-row" title="Detect traps: sacrifices, tempting captures, opening traps">
-        <input type="checkbox" data-key="showTrapboy">
-        <span class="icon">&#129683;</span> Trapboy
-      </label>
-    </div>
-
-    <div class="chee-section-header">Display</div>
-
-    <div class="toggle-grid">
-      <label class="chee-toggle-row" title="Also render hovered move on board (off = arrow only)">
-        <input type="checkbox" data-key="previewLastMove">
-        <span class="icon">&#128065;</span> Preview last
-      </label>
-
-      <label class="chee-toggle-row" title="Show evaluation score chart tracking the game">
-        <input type="checkbox" data-key="showChart">
-        <span class="icon">&#128200;</span> Eval chart
-      </label>
-    </div>
-
-    <div class="theme-row">
-      <label>Theme</label>
-      <select id="theme-select">
-        <option value="site">Match Site</option>
-        <option value="latte">Latte</option>
-        <option value="frappe">Frappé</option>
-        <option value="macchiato">Macchiato</option>
-        <option value="mocha">Mocha</option>
-      </select>
-    </div>
-
-    <div class="chee-section-header">Engine</div>
-
-    <div class="engine-grid">
-      <div>
-        <label>Lines</label>
-        <div class="btn-group" data-key="numLines">
-          <button data-val="3">3</button>
-          <button data-val="4">4</button>
-          <button data-val="5">5</button>
-        </div>
-      </div>
-      <div>
-        <label>Depth</label>
-        <div class="btn-group" data-key="searchDepth">
-          <button data-val="15">15</button>
-          <button data-val="18">18</button>
-          <button data-val="20">20</button>
-          <button data-val="22">22</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="toggle-grid">
-      <label class="chee-toggle-row" title="Wait for full depth before showing hint arrows">
-        <input type="checkbox" data-key="waitForComplete">
-        <span class="icon">&#9201;</span> Full depth
-      </label>
-
-      <label class="chee-toggle-row" title="Enable debug logging in console (chee:*)">
-        <input type="checkbox" data-key="debugMode">
-        <span class="icon">&#128736;</span> Debug
-      </label>
-    </div>
-
-    <button id="copy-debug" class="copy-debug-btn" title="Copy diagnostic info to clipboard for AI debugging">
-      &#128203; Copy debug info
-    </button>
+  <label>Depth</label>
+  <div class="btn-group" data-key="searchDepth">
+    <button data-val="15">15</button>
+    <button data-val="18">18</button>
+    <button data-val="20">20</button>
+    <button data-val="22">22</button>
   </div>
 
-  <div id="tab-puzzles" class="tab-content">
-    <div class="puzzle-grid">
-      <div>
-        <div class="puzzle-col-header">chess.com</div>
-        <label class="chee-toggle-row">
-          <input type="checkbox" data-key="enablePuzzles"> Puzzles
-        </label>
-        <label class="chee-toggle-row">
-          <input type="checkbox" data-key="enablePuzzleRush"> Rush
-        </label>
-        <label class="chee-toggle-row">
-          <input type="checkbox" data-key="enablePuzzleBattle"> Battle
-        </label>
-        <label class="chee-toggle-row">
-          <input type="checkbox" data-key="enablePuzzleLearning"> Learning
-        </label>
-        <label class="chee-toggle-row">
-          <input type="checkbox" data-key="enableDaily"> Daily
-        </label>
-      </div>
-      <div>
-        <div class="puzzle-col-header">lichess</div>
-        <label class="chee-toggle-row">
-          <input type="checkbox" data-key="enableLichessTraining"> Training
-        </label>
-        <label class="chee-toggle-row">
-          <input type="checkbox" data-key="enableLichessStorm"> Storm
-        </label>
-        <label class="chee-toggle-row">
-          <input type="checkbox" data-key="enableLichessRacer"> Racer
-        </label>
-        <label class="chee-toggle-row">
-          <input type="checkbox" data-key="enableLichessStreak"> Streak
-        </label>
-      </div>
-    </div>
+  <label class="chee-toggle-row" title="Enable debug logging in console (chee:*)">
+    <input type="checkbox" data-key="debugMode">
+    <span class="icon">&#128736;</span> Debug
+  </label>
 
-  </div>
+  <button id="copy-debug" class="copy-debug-btn" title="Copy diagnostic info to clipboard for AI debugging">
+    &#128203; Copy debug info
+  </button>
 
   <script src="popup.js"></script>
 </body>

@@ -69,10 +69,6 @@ export class ChartRenderer {
     }
   }
 
-  setVisible(show) {
-    if (this._container) this._container.style.display = show ? '' : 'none';
-  }
-
   recordScore(ply, data, turn) {
     if (!data.lines || data.lines.length === 0) return;
     const line = data.lines[0];
@@ -87,12 +83,6 @@ export class ChartRenderer {
     this._scores.set(ply, whiteScore);
     if (isNew) this._insertSortedPly(ply);
     this._renderChart(ply);
-  }
-
-  clearScores() {
-    this._scores.clear();
-    this._sortedPlies = [];
-    this._renderChart(0);
   }
 
   _insertSortedPly(ply) {

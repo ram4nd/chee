@@ -30,17 +30,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
-  // Tab switching
-  document.querySelectorAll('.tab-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      document.querySelector('.tab-btn.active').classList.remove('active');
-      document.querySelector('.tab-content.active').classList.remove('active');
-      btn.classList.add('active');
-      document.getElementById(btn.dataset.tab).classList.add('active');
-    });
-  });
-
-  // Button groups (numLines, searchDepth)
+  // Button groups (searchDepth)
   document.querySelectorAll('.btn-group').forEach((group) => {
     const { key } = group.dataset;
     const buttons = group.querySelectorAll('button');
@@ -86,8 +76,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             sections.push(`Adapter: ${page.adapter}`);
             sections.push(`Engine: ${page.engineState}, FEN: ${page.engineFen || 'none'}`);
             sections.push(`Board: ${page.boardFound ? 'found' : 'missing'}, Ply: ${page.ply}, Turn: ${page.turn}`);
-            sections.push(`Hint: ${page.isHintPage ? page.hintMatch : 'no'}, Daily: ${page.isDailyPage}`);
-            sections.push(`Plugins: ${page.plugins.join(', ')}`);
             if (page.logs && page.logs.length > 0) {
               sections.push('');
               sections.push('--- Recent Logs ---');

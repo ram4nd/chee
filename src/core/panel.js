@@ -1,14 +1,9 @@
-// Analysis panel UI component — delegates to sub-renderers
+// Analysis panel UI component — eval chart with drag/resize/hide controls
 
 import { el } from '../lib/dom.js';
-import { Emitter } from '../lib/emitter.js';
 import { HeaderRenderer } from './renderers/header-renderer.js';
 import { ChartRenderer } from './renderers/chart-renderer.js';
-import { LineRenderer } from './renderers/line-renderer.js';
-import {
-  PANEL_ID, NUM_LINES as DEFAULT_NUM_LINES,
-  EVT_LINE_HOVER, EVT_LINE_LEAVE, EVT_PGN_COPY,
-} from '../constants.js';
+import { PANEL_ID } from '../constants.js';
 
 function createShowButton() {
   const btn = el('button', 'chee-show');
@@ -17,30 +12,14 @@ function createShowButton() {
   return btn;
 }
 
-function createStatus() {
-  const status = el('div', 'chee-status');
-  const accuracy = el('span', 'chee-accuracy');
-  const copyPgn = el('button', 'chee-copy-pgn');
-  copyPgn.title = 'Copy PGN';
-  copyPgn.textContent = 'PGN';
-  const copyFen = el('button', 'chee-copy-fen');
-  copyFen.title = 'Copy FEN';
-  copyFen.textContent = 'FEN';
-  status.append(accuracy, copyPgn, copyFen);
-  return status;
-}
-
 // ─── Panel ───────────────────────────────────────────────────
-export class Panel extends Emitter {
-  constructor(numLines = DEFAULT_NUM_LINES) {
-    super();
+export class Panel {
+  constructor() {
     this._el = null;
-    this._fen = null;
-    this._numLines = numLines;
+    this._turn = null;
 
     this._header = new HeaderRenderer();
     this._chart = new ChartRenderer();
-    this._lineRenderer = new LineRenderer(numLines);
   }
 
   mount(anchor) {
@@ -57,9 +36,7 @@ export class Panel extends Emitter {
     const resizeHandle = el('div', 'chee-resize');
     this._el.append(
       this._header.createDOM(),
-      this._lineRenderer.createDOM(),
       this._chart.createDOM(),
-      createStatus(),
       resizeHandle,
     );
 
@@ -69,17 +46,13 @@ export class Panel extends Emitter {
     document.body.appendChild(this._el);
     document.body.appendChild(this._showBtn);
 
-    this._header.bind(this._el);
-    this._header.initAccuracy();
     this._chart.bind(this._el);
-    this._lineRenderer.bind(this._el);
     this._attachListeners();
     this._positionDefault();
     this._startPositionTracking();
   }
 
   get el() { return this._el; }
-  get turn() { return this._header.turn; }
 
   destroy() {
     this._stopPositionTracking();
@@ -87,81 +60,17 @@ export class Panel extends Emitter {
     this._teardownResize();
     if (this._el) { this._el.remove(); this._el = null; }
     if (this._showBtn) { this._showBtn.remove(); this._showBtn = null; }
-    this._header.destroy();
     this._chart.destroy();
-    this._lineRenderer.destroy();
     this._toggleEl = null;
-    this._copyFenEl = null;
-    this._copyPgnEl = null;
     this._hideEl = null;
-    this.removeAllListeners();
   }
 
-  setBoard(board, turn, fen) {
-    this._fen = fen;
-    this._header.setTurn(turn);
-    this._header.updateOpening(fen);
-    this._lineRenderer.setBoard(board, turn);
-  }
-
-  setLoading(loading) {
-    if (!this._el) return;
-    this._header.setLoading(loading);
-  }
-
-  setMaxDepth(maxDepth) {
-    this._header.setMaxDepth(maxDepth);
-  }
-
-  updateEval(data) {
-    if (!this._el) return;
-    const { lines } = data;
-    if (!lines || lines.length === 0) return;
-
-    this._header.updateEval(lines[0], data.depth);
-    this._lineRenderer.updateLines(lines);
-  }
-
-  showClassification(result, insight) {
-    if (!this._el) return;
-    this._header.showClassification(result, insight);
-  }
-
-  showAccuracy(pct) {
-    this._header.showAccuracy(pct);
-  }
-
-  clearClassification() {
-    if (!this._el) return;
-    this._header.clearClassification();
-  }
-
-  setSlot(name, element) {
-    if (!this._el) return;
-    this._header.setSlot(name, element);
-  }
-
-  clearSlot(name) {
-    if (!this._el) return;
-    this._header.clearSlot(name);
+  setTurn(turn) {
+    this._turn = turn;
   }
 
   recordScore(ply, data) {
-    this._chart.recordScore(ply, data, this._header.turn);
-  }
-
-  clearScores() {
-    this._chart.clearScores();
-  }
-
-  setShowChart(show) {
-    this._chart.setVisible(show);
-  }
-
-  reconfigure(numLines) {
-    if (numLines === this._numLines) return;
-    this._numLines = numLines;
-    this._lineRenderer.reconfigure(numLines, this._el);
+    this._chart.recordScore(ply, data, this._turn);
   }
 
   toggleHidden() {
@@ -401,27 +310,11 @@ export class Panel extends Emitter {
 
   _attachListeners() {
     this._toggleEl = this._el.querySelector('.chee-toggle');
-    this._copyFenEl = this._el.querySelector('.chee-copy-fen');
-    this._copyPgnEl = this._el.querySelector('.chee-copy-pgn');
     this._hideEl = this._el.querySelector('.chee-hide');
     this._toggleEl.addEventListener('click', () => {
       const minimized = !this._el.classList.contains('chee-minimized');
       this._setMinimized(minimized);
       chrome.storage.sync.set({ panelMinimized: minimized });
-    });
-    this._copyFenEl.addEventListener('click', () => {
-      if (!this._fen) return;
-      navigator.clipboard.writeText(this._fen).then(() => {
-        this._copyFenEl.textContent = '\u2713';
-        this._copyFenEl.classList.add('chee-copied');
-        setTimeout(() => {
-          this._copyFenEl.textContent = 'FEN';
-          this._copyFenEl.classList.remove('chee-copied');
-        }, 1000);
-      });
-    });
-    this._copyPgnEl.addEventListener('click', () => {
-      this.emit(EVT_PGN_COPY);
     });
     this._hideEl.addEventListener('click', () => {
       this._setHidden(true);
@@ -431,10 +324,6 @@ export class Panel extends Emitter {
       this._setHidden(false);
       chrome.storage.sync.set({ panelHidden: false });
     });
-
-    // Forward line events
-    this._lineRenderer.on(EVT_LINE_HOVER, (...args) => this.emit(EVT_LINE_HOVER, ...args));
-    this._lineRenderer.on(EVT_LINE_LEAVE, () => this.emit(EVT_LINE_LEAVE));
 
     this._initDrag();
     this._initResize();

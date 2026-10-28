@@ -1,7 +1,7 @@
 {
   "name": "chee",
   "version": "2.0.1",
-  "description": "Real-time Stockfish analysis on chess.com and lichess — eval, best moves, classifications, traps, and more",
+  "description": "Live Stockfish eval chart on chess.com and lichess",
   "author": "Hong4rc <hong4rc@gmail.com>",
   "license": "GPL-3.0",
   "repository": {

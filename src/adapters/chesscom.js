@@ -50,25 +50,6 @@ const SEL_SELECTED_MOVE = 'wc-simple-move-list .node-highlight-content.selected'
 const SEL_HIGHLIGHT = '.highlight';
 const SEL_MOVE_LIST_EL = 'wc-simple-move-list';
 const SEL_BOARD_LAYOUT = '.board-layout-chessboard';
-const SEL_PLAYER_NAME = '.user-tagline-username';
-const SEL_RESULT = 'wc-simple-move-list .result-text, .result-text';
-const NODE_TEXT = 3; // Node.TEXT_NODE
-const NODE_ELEMENT = 1; // Node.ELEMENT_NODE
-
-// Unicode chess figurine → SAN letter (covers both filled and outline sets)
-const FIGURINE_MAP = {
-  '\u2654': 'K',
-  '\u2655': 'Q',
-  '\u2656': 'R',
-  '\u2657': 'B',
-  '\u2658': 'N',
-  '\u265A': 'K',
-  '\u265B': 'Q',
-  '\u265C': 'R',
-  '\u265D': 'B',
-  '\u265E': 'N',
-};
-const VALID_RESULTS = ['1-0', '0-1', '1/2-1/2'];
 
 const CLS_WHITE_MOVE = 'white-move';
 const CLS_BLACK_MOVE = 'black-move';
@@ -297,72 +278,6 @@ export class ChesscomAdapter extends BoardAdapter {
       this._moveListObserver = new MutationObserver(onChange);
       this._moveListObserver.observe(moveList, { childList: true, subtree: true });
     }
-  }
-
-  getPieceImageMap(boardEl) {
-    const root = boardEl.shadowRoot || boardEl;
-    const pieces = discoverPieceElements(root);
-    const imgMap = new Map();
-    forEach(Array.from(pieces), (pieceEl) => {
-      const classes = (pieceEl.getAttribute('class') || '').split(/\s+/);
-      const pieceCls = find(classes, (c) => c.length === 2 && PIECE_MAP[c]);
-      if (!pieceCls || imgMap.has(PIECE_MAP[pieceCls])) return;
-      const style = getComputedStyle(pieceEl);
-      if (style.backgroundImage && style.backgroundImage !== 'none') {
-        imgMap.set(PIECE_MAP[pieceCls], style.backgroundImage);
-      }
-    });
-    return imgMap;
-  }
-
-  readMoveList() {
-    const moveNodes = document.querySelectorAll(SEL_MOVE_LIST);
-    if (moveNodes.length === 0) return null;
-    const moves = map(Array.from(moveNodes), (node) => this._extractMoveText(node));
-    return { moves, startPly: 0 };
-  }
-
-  _extractMoveText(node) {
-    const content = node.querySelector('.node-highlight-content');
-    const target = content || node;
-    let text = '';
-    forEach(Array.from(target.childNodes), (child) => {
-      if (child.nodeType === NODE_TEXT) {
-        text += child.textContent;
-      } else if (child.nodeType === NODE_ELEMENT) {
-        const figurine = child.getAttribute('data-figurine');
-        text += figurine || child.textContent;
-      }
-    });
-    // Replace Unicode figurines that may appear when data-figurine is absent
-    let result = '';
-    for (const ch of text) {
-      result += FIGURINE_MAP[ch] || ch;
-    }
-    // SAN moves never contain spaces — collapse any whitespace from DOM formatting
-    return result.replace(/\s+/g, '');
-  }
-
-  readPlayerNames() {
-    const nameEls = document.querySelectorAll(SEL_PLAYER_NAME);
-    if (nameEls.length < 2) return null;
-    // chess.com renders bottom player first in DOM when not flipped,
-    // but the order depends on board orientation. Use the player card
-    // container classes to distinguish.
-    const names = map(Array.from(nameEls), (el) => el.textContent.trim());
-    // Bottom player = first .user-tagline-username in DOM.
-    // If board is flipped, bottom is black; otherwise bottom is white.
-    // We can't reliably detect flip here, so return in DOM order:
-    // first = bottom player, second = top player.
-    // The board layout places white at bottom by default.
-    return { white: names[0], black: names[1] };
-  }
-
-  readGameResult() {
-    const resultEl = document.querySelector(SEL_RESULT);
-    if (!resultEl) return '*';
-    const text = resultEl.textContent.trim();
-    return includes(VALID_RESULTS, text) ? text : '*';
   }
 
   findAlternatePieceContainer(boardEl) {

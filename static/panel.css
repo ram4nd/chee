@@ -20,7 +20,7 @@
 #chee-analysis-panel .chee-header {
   background: var(--chee-mantle);
   border-bottom: 1px solid var(--chee-surface0);
-  padding: 6px 10px 0;
+  padding: 6px 10px;
   cursor: grab;
 }
 
@@ -37,188 +37,20 @@ body.chee-dragging {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding-bottom: 6px;
 }
 
-#chee-analysis-panel .chee-eval-score {
-  font-size: 14px;
-  font-weight: 700;
-  padding: 1px 6px;
-  border-radius: 3px;
-  border: 1px solid transparent;
-  margin-left: auto;
-}
-
-#chee-analysis-panel .chee-eval-score.white-advantage {
-  color: #1a1a1a;
-  background: #e8e8e8;
-  border-color: #ccc;
-}
-
-#chee-analysis-panel .chee-eval-score.black-advantage {
-  color: #e8e8e8;
-  background: #2a2a2a;
-  border-color: #444;
-}
-
-#chee-analysis-panel .chee-eval-score.mate-score {
-  color: var(--chee-peach) !important;
-}
-
-@keyframes chee-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-
-#chee-analysis-panel .chee-eval-score.chee-loading {
-  color: var(--chee-overlay0);
-  animation: chee-pulse 1.2s ease-in-out infinite;
-}
-
-#chee-analysis-panel .chee-depth {
-  font-weight: 400;
-  font-size: 12px;
-  color: var(--chee-overlay0);
-}
-
-#chee-analysis-panel .chee-depth-bar {
-  height: 2px;
-  background: var(--chee-surface0);
-}
-
-#chee-analysis-panel .chee-depth-fill {
-  height: 100%;
-  width: 0%;
-  background: var(--chee-green, #a6e3a1);
-  transition: width 0.3s ease;
-}
-
-/* W/D/L bar */
-#chee-analysis-panel .chee-eval-bar {
-  display: flex;
-  height: 6px;
-  border: 1px solid var(--chee-surface0);
-  border-radius: 3px;
-  overflow: hidden;
-  margin: 0;
-}
-
-#chee-analysis-panel .chee-wdl-w {
-  background: #e8e8e8;
-  width: 50%;
-  transition: width 0.3s ease;
-}
-
-#chee-analysis-panel .chee-wdl-d {
-  background: #888;
-  width: 0%;
-  transition: width 0.3s ease;
-}
-
-#chee-analysis-panel .chee-wdl-l {
-  background: #2a2a2a;
+#chee-analysis-panel .chee-title {
   flex: 1;
-  transition: width 0.3s ease;
-}
-
-/* W/D/L text */
-#chee-analysis-panel .chee-wdl-text {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  padding: 2px 0 4px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
   color: var(--chee-subtext0);
-}
-
-#chee-analysis-panel .chee-wdl-w-pct { color: #e8e8e8; }
-#chee-analysis-panel .chee-wdl-d-pct { color: #aaa; }
-#chee-analysis-panel .chee-wdl-l-pct { color: #888; }
-
-/* Lines */
-#chee-analysis-panel .chee-lines {
-  padding: 4px 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-#chee-analysis-panel .chee-line {
-  display: flex;
-  align-items: stretch;
-  padding: 0 6px;
-  border: 1px solid var(--chee-surface0);
-  border-radius: 3px;
-}
-
-#chee-analysis-panel .chee-line:hover {
-  background: var(--chee-surface1);
-  border-color: var(--chee-overlay0);
-  cursor: pointer;
-}
-
-#chee-analysis-panel .chee-line-rank {
-  color: var(--chee-subtext0);
-  font-size: 12px;
-  flex-shrink: 0;
-  width: 12px;
-  display: flex;
-  align-items: center;
-  margin-right: 6px;
-}
-
-#chee-analysis-panel .chee-line-score {
-  font-size: 12px;
-  font-weight: 700;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  margin-right: 6px;
-  padding: 0 3px;
-  border-radius: 2px;
-}
-
-#chee-analysis-panel .chee-line-score.white-advantage {
-  color: #1a1a1a;
-  background: #e8e8e8;
-}
-
-#chee-analysis-panel .chee-line-score.black-advantage {
-  color: #e8e8e8;
-  background: #2a2a2a;
-}
-
-#chee-analysis-panel .chee-line-moves {
-  font-family: 'Lucida Console', 'Menlo', monospace;
-  font-size: 12px;
-  color: var(--chee-subtext1);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex: 1;
-  display: flex;
-  align-items: stretch;
-}
-
-/* Individual move spans */
-#chee-analysis-panel .chee-move {
-  cursor: pointer;
-  padding: 4px 2px;
-  border-radius: 2px;
-  margin-right: 0.3em;
-  display: inline-flex;
-  align-items: center;
-}
-
-#chee-analysis-panel .chee-move:hover {
-  background: var(--chee-surface1);
-  color: var(--chee-text);
 }
 
 /* Eval chart */
 #chee-analysis-panel .chee-chart {
   position: relative;
-  height: 40px;
-  border-top: 1px solid var(--chee-surface0);
+  height: 60px;
   overflow: hidden;
 }
 
@@ -259,67 +91,6 @@ body.chee-dragging {
   opacity: 0.8;
 }
 
-/* Status bar */
-#chee-analysis-panel .chee-status {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 5px 10px;
-  font-size: 11px;
-  color: var(--chee-subtext0);
-  border-top: 1px solid var(--chee-surface0);
-  background: var(--chee-mantle);
-}
-
-#chee-analysis-panel .chee-accuracy {
-  font-weight: 700;
-  font-size: 12px;
-  flex: 1;
-  display: flex;
-  gap: 4px;
-}
-
-
-#chee-analysis-panel .chee-acc-white {
-  color: #e8e8e8;
-}
-
-#chee-analysis-panel .chee-acc-black {
-  color: #888;
-}
-
-/* Copy PGN / FEN buttons */
-#chee-analysis-panel .chee-copy-pgn,
-#chee-analysis-panel .chee-copy-fen {
-  cursor: pointer;
-  color: var(--chee-subtext0);
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1;
-  padding: 2px 4px;
-  min-width: 28px;
-  text-align: center;
-  border: 1px solid var(--chee-surface1);
-  border-radius: 3px;
-  background: var(--chee-surface0);
-  letter-spacing: 0.5px;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-
-#chee-analysis-panel .chee-copy-pgn:hover,
-#chee-analysis-panel .chee-copy-fen:hover {
-  color: var(--chee-text);
-  border-color: var(--chee-overlay0);
-}
-
-#chee-analysis-panel .chee-copy-pgn.chee-copied,
-#chee-analysis-panel .chee-copy-fen.chee-copied {
-  color: var(--chee-green, #a6e3a1);
-  border-color: var(--chee-green, #a6e3a1);
-  background: rgba(166, 227, 161, 0.1);
-}
-
 /* Hide / Toggle buttons */
 #chee-analysis-panel .chee-hide,
 #chee-analysis-panel .chee-toggle {
@@ -340,10 +111,8 @@ body.chee-dragging {
   color: var(--chee-text);
 }
 
-/* Minimized state — hide lines + chart + status, keep header + bar */
-#chee-analysis-panel.chee-minimized .chee-lines,
-#chee-analysis-panel.chee-minimized .chee-chart,
-#chee-analysis-panel.chee-minimized .chee-status {
+/* Minimized state — hide chart, keep header */
+#chee-analysis-panel.chee-minimized .chee-chart {
   display: none;
 }
 
@@ -377,108 +146,6 @@ body.chee-dragging {
 
 #chee-show-btn.chee-visible {
   display: inline-flex;
-}
-
-/* Classification slot + badge */
-#chee-analysis-panel .chee-classification-slot {
-  display: contents;
-}
-
-
-/* Opening name */
-#chee-analysis-panel .chee-opening-slot {
-  font-size: 11px;
-  color: var(--chee-subtext0);
-  padding: 0 10px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-#chee-analysis-panel .chee-opening-slot:empty {
-  display: none;
-}
-
-/* Insight slot (between top row and eval bar) */
-#chee-analysis-panel .chee-insight-slot {
-  padding: 0 10px 4px;
-}
-
-#chee-analysis-panel .chee-insight {
-  font-size: 10px;
-  font-style: italic;
-  color: var(--chee-subtext0);
-}
-
-/* Plugin slots container */
-#chee-analysis-panel .chee-plugin-slots:empty {
-  display: none;
-}
-
-/* Trapboy slot (trap detection info) */
-
-#chee-analysis-panel .chee-trapboy {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 10px 4px;
-  font-size: 10px;
-  font-weight: 600;
-  flex-wrap: wrap;
-}
-
-#chee-analysis-panel .chee-trapboy-title {
-  color: #d946ef;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 1px;
-}
-
-#chee-analysis-panel .chee-trapboy-bait {
-  color: #d946ef;
-}
-
-#chee-analysis-panel .chee-trapboy-greed {
-  color: #ca3431;
-}
-
-#chee-analysis-panel .chee-trapboy-god {
-  color: #96bc4b;
-}
-
-#chee-analysis-panel .chee-trapboy-status {
-  color: var(--chee-overlay0);
-  font-weight: 400;
-  font-style: italic;
-}
-
-#chee-analysis-panel .chee-trapboy-done {
-  opacity: 0.4;
-  text-decoration: line-through;
-}
-
-#chee-analysis-panel .chee-trapboy-active {
-  font-weight: 800;
-  text-decoration: underline;
-}
-
-#chee-analysis-panel .chee-trapboy-hoverable {
-  cursor: pointer;
-}
-
-#chee-analysis-panel .chee-trapboy-hoverable:hover {
-  opacity: 0.7;
-}
-
-#chee-analysis-panel .chee-classification-badge {
-  font-size: 11px;
-  font-weight: 700;
-  color: #fff;
-  padding: 1px 6px;
-  border-radius: 8px;
-  line-height: 1.4;
-  white-space: nowrap;
-  letter-spacing: 0.3px;
 }
 
 /* Resize handle — bottom-right grip */
@@ -516,34 +183,4 @@ body.chee-dragging {
 body.chee-resizing {
   user-select: none;
   cursor: nwse-resize !important;
-}
-
-/* ─── Arrow / overlay animations ──────────────────────────── */
-@keyframes chee-fade-in {
-  from { opacity: 0; }
-}
-
-line.chee-arrow-el, circle.chee-arrow-el,
-line.chee-hint-el, circle.chee-hint-el,
-line.chee-insight-el, circle.chee-insight-el,
-circle.chee-guard-el,
-circle.chee-classify-el, text.chee-classify-el {
-  animation: chee-fade-in 0.15s ease-out;
-}
-
-line[class^="chee-layer-"], circle[class^="chee-layer-"] {
-  animation: chee-fade-in 0.15s ease-out;
-}
-
-.chee-preview-el {
-  animation: chee-fade-in 0.12s ease-out;
-}
-
-@keyframes chee-badge-pop {
-  from { opacity: 0; transform: scale(0.5); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-#chee-analysis-panel .chee-classification-badge {
-  animation: chee-badge-pop 0.2s ease-out;
 }

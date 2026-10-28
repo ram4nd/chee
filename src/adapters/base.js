@@ -95,14 +95,6 @@ export class BoardAdapter {
 
   _getHighlightedSquares() { return null; }
 
-  // Return a Map of FEN piece char → CSS background-image string for board preview.
-  getPieceImageMap(boardEl) { return new Map(); } // eslint-disable-line no-unused-vars
-
-  // PGN DOM read — adapters override to provide full game data at export time
-  readMoveList() { return null; }
-  readPlayerNames() { return null; }
-  readGameResult() { return '*'; }
-
   // Optional methods — no-op by default, overridden by adapters that need them
   findAlternatePieceContainer() { return null; }
   exploreBoardArea() {}
