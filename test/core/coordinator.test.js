@@ -24,7 +24,7 @@ function makeEngine() {
     analyze: vi.fn(),
     stop: vi.fn(),
     shutdown: vi.fn(),
-    reconfigure: vi.fn(),
+    setDepth: vi.fn(),
     destroy: vi.fn(),
     on: vi.fn((evt, fn) => { handlers[evt] = fn; }),
   };
@@ -220,6 +220,16 @@ describe('ReviewCoordinator', () => {
     retry();
     expect(engine.init).toHaveBeenCalledTimes(2);
     expect(engine.analyze).toHaveBeenCalledTimes(2);
+  });
+
+  it('re-reviews at a new depth', () => {
+    const { engine, coordinator } = setup(['e4']);
+    coordinator.sync();
+    reply(engine, { score: 30, bestmove: 'e2e4' });
+    reply(engine, { score: -30, bestmove: 'e7e5' });
+    coordinator.applySettings({ searchDepth: 18 });
+    expect(engine.setDepth).toHaveBeenCalledWith(18);
+    expect(engine.analyze).toHaveBeenCalledTimes(3);
   });
 
   it('jumps the board when the panel asks to seek', () => {

@@ -69,7 +69,7 @@ export class ReviewCoordinator {
     if (newSettings.theme && this._panel.el) applyTheme(this._panel.el, this._settings.theme);
 
     if (!('searchDepth' in newSettings) || newSettings.searchDepth === prevSearchDepth) return;
-    if (this._engineStarted) this._engine.reconfigure(this._settings);
+    this._engine.setDepth(this._settings.searchDepth);
     this._movesKey = null;
     this.sync();
   }

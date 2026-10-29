@@ -3,7 +3,7 @@
   "name": "Chee - Game Review Chart",
   "version": "2.0.1",
   "description": "Stockfish eval chart and your mistakes on chess.com, shown only after the game ends",
-  "homepage_url": "https://github.com/hong4rc/chee",
+  "homepage_url": "https://github.com/ram4nd/chee",
   "permissions": [
     "storage"
   ],

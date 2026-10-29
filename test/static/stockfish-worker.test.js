@@ -21,7 +21,6 @@ beforeEach(() => {
   fakeSelf = {
     __commands: [],
     __sfCode: FAKE_SF,
-    __searchDepth: 12,
     postMessage: (m) => posted.push(m),
     fetch: vi.fn(),
   };
@@ -37,7 +36,7 @@ describe('stockfish worker', () => {
   });
 
   it('posts one result per finished search with the best move', () => {
-    send({ type: 'position', fen: 'F1' });
+    send({ type: 'position', fen: 'F1', depth: 12 });
     expect(fakeSelf.__commands).toContain('position fen F1');
     expect(fakeSelf.__commands).toContain('go depth 12');
     engineSays('info depth 1 score cp 10 pv e2e4');
@@ -49,7 +48,7 @@ describe('stockfish worker', () => {
   });
 
   it('does not report a stopped search', () => {
-    send({ type: 'position', fen: 'F1' });
+    send({ type: 'position', fen: 'F1', depth: 12 });
     engineSays('info depth 3 score cp 10');
     send({ type: 'stop' });
     engineSays('bestmove e2e4');
@@ -57,13 +56,14 @@ describe('stockfish worker', () => {
   });
 
   it('switches to a new position without reporting the interrupted one', () => {
-    send({ type: 'position', fen: 'F1' });
+    send({ type: 'position', fen: 'F1', depth: 12 });
     engineSays('info depth 3 score cp 10');
-    send({ type: 'position', fen: 'F2' });
+    send({ type: 'position', fen: 'F2', depth: 14 });
     expect(fakeSelf.__commands.at(-1)).toBe('stop');
     engineSays('bestmove e2e4');
     engineSays('readyok');
     expect(fakeSelf.__commands).toContain('position fen F2');
+    expect(fakeSelf.__commands.at(-1)).toBe('go depth 14');
     engineSays('info depth 12 score mate 2');
     engineSays('bestmove d1h5');
     expect(evals()).toEqual([{
@@ -72,7 +72,7 @@ describe('stockfish worker', () => {
   });
 
   it('reports a finished search without a score as an error', () => {
-    send({ type: 'position', fen: 'F1' });
+    send({ type: 'position', fen: 'F1', depth: 12 });
     engineSays('bestmove (none)');
     expect(posted.at(-1)).toEqual({ type: MSG_ERROR, message: expect.stringContaining('F1') });
   });

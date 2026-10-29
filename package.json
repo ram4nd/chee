@@ -6,11 +6,11 @@
   "license": "GPL-3.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/hong4rc/chee.git"
+    "url": "https://github.com/ram4nd/chee.git"
   },
-  "homepage": "https://chromewebstore.google.com/detail/chee-live-chess-analysis/ekgoeikafahejbjhpandajnomnohlang",
+  "homepage": "https://github.com/ram4nd/chee",
   "bugs": {
-    "url": "https://github.com/hong4rc/chee/issues"
+    "url": "https://github.com/ram4nd/chee/issues"
   },
   "private": true,
   "scripts": {
@@ -27,7 +27,6 @@
     "release:minor": "release-it minor",
     "release:major": "release-it major",
     "pack": "npm run build && cd dist && zip -r ../chee-v$(node -p \"require('../package.json').version\").zip . -x '.*'",
-    "publish:cws": "npm run pack && chrome-webstore-upload upload --source chee-v$(node -p \"require('./package.json').version\").zip --auto-publish",
     "prepare": "lefthook install"
   },
   "devDependencies": {
@@ -38,7 +37,6 @@
     "@rollup/plugin-node-resolve": "^16.0.3",
     "@rollup/plugin-replace": "^6.0.3",
     "@vitest/coverage-v8": "^5.0.5",
-    "chrome-webstore-upload-cli": "^4.0.2",
     "eslint": "^8.57.1",
     "eslint-config-airbnb-base": "^15.0.0",
     "eslint-plugin-import": "^2.32.0",

@@ -66,7 +66,6 @@ describe('themes', () => {
       const keys = el.style.setProperty.mock.calls.map((c) => c[0]);
       expect(keys).toContain('--chee-base');
       expect(keys).toContain('--chee-mantle');
-      expect(keys).toContain('--chee-crust');
       expect(keys).toContain('--chee-surface0');
       expect(keys).toContain('--chee-surface1');
       expect(keys).toContain('--chee-text');

@@ -39,4 +39,4 @@ These Terms may be updated at any time. Continued use of Chee after changes cons
 
 ## 8. Contact
 
-For questions about these Terms, contact: aqua.hong.97@gmail.com
+For questions about these Terms, open an issue at https://github.com/ram4nd/chee/issues.

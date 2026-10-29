@@ -5,7 +5,8 @@ import { Emitter } from '../lib/emitter.js';
 import {
   WORKER_FILE, STOCKFISH_JS_FILE, STOCKFISH_WASM_FILE,
   EVT_READY, EVT_EVAL, EVT_ERROR,
-  MSG_SETUP, MSG_READY, MSG_EVAL, MSG_ERROR, MSG_POSITION, MSG_STOP, MSG_RECONFIGURE,
+  MSG_SETUP, MSG_READY, MSG_EVAL, MSG_ERROR, MSG_POSITION, MSG_STOP,
+  SEARCH_DEPTH,
 } from '../constants.js';
 
 const log = createDebug('chee:engine');
@@ -32,6 +33,7 @@ export class Engine extends Emitter {
   constructor() {
     super();
     this._worker = null;
+    this._depth = SEARCH_DEPTH;
     this._state = State.IDLE;
     this._currentFen = null;
     this._pendingFen = null;
@@ -45,6 +47,7 @@ export class Engine extends Emitter {
   get currentFen() { return this._currentFen; }
 
   async init(settings = {}) {
+    if (settings.searchDepth) this._depth = settings.searchDepth;
     if (this._state !== State.IDLE) return;
     this._state = State.INITIALIZING;
     log.info('fetching resources...');
@@ -67,7 +70,6 @@ export class Engine extends Emitter {
         '    self.removeEventListener("message", __h);',
         '    self.__sfCode = e.data.sfCode;',
         '    self.__wasmBinary = e.data.wasmBinary;',
-        '    self.__searchDepth = e.data.searchDepth;',
         '    try { (0, eval)(e.data.workerCode); }',
         `    catch(err) { self.postMessage({ type: "${MSG_ERROR}", message: "Worker eval failed: " + err.message }); }`,
         '  }',
@@ -88,7 +90,7 @@ export class Engine extends Emitter {
         // Recoverable: only giving up is reported as EVT_ERROR
         log.warn('worker onerror:', err.message, err);
         this._state = State.ERROR;
-        this._autoRecover(settings);
+        this._autoRecover();
       };
 
       this._worker.postMessage({
@@ -96,7 +98,6 @@ export class Engine extends Emitter {
         workerCode,
         sfCode,
         wasmBinary: wasmBuf,
-        searchDepth: settings.searchDepth,
       }, [wasmBuf]);
 
       log('setup message sent');
@@ -118,7 +119,7 @@ export class Engine extends Emitter {
     log('analyzing:', fen);
     this._state = State.ANALYZING;
     this._currentFen = fen;
-    this._worker.postMessage({ type: MSG_POSITION, fen });
+    this._worker.postMessage({ type: MSG_POSITION, fen, depth: this._depth });
   }
 
   stop() {
@@ -131,15 +132,9 @@ export class Engine extends Emitter {
     }
   }
 
-  reconfigure(settings) {
-    if (!this._worker || this._state === State.IDLE || this._state === State.INITIALIZING
-      || this._state === State.ERROR) return;
-    log.info(`reconfiguring engine: depth:${settings.searchDepth}`);
-    this._worker.postMessage({
-      type: MSG_RECONFIGURE,
-      searchDepth: settings.searchDepth,
-    });
-    this._currentFen = null;
+  // Applies from the next analyze() call
+  setDepth(depth) {
+    this._depth = depth;
   }
 
   // Unloads the worker; listeners stay so init() can start it again
@@ -162,7 +157,7 @@ export class Engine extends Emitter {
     this.removeAllListeners();
   }
 
-  _autoRecover(settings) {
+  _autoRecover() {
     if (this._recovering) return;
     this._recovering = true;
     // A crash before the engine was ready leaves the position queued rather than current
@@ -194,7 +189,7 @@ export class Engine extends Emitter {
     this._recoverTimer = setTimeout(() => {
       this._recoverTimer = null;
       this._recovering = false;
-      this.init(settings);
+      this.init();
     }, 1000);
   }
 

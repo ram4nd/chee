@@ -4,7 +4,8 @@ import {
 import { Engine } from '../../src/core/engine.js';
 import {
   EVT_READY, EVT_EVAL, EVT_ERROR,
-  MSG_READY, MSG_EVAL, MSG_ERROR, MSG_POSITION, MSG_STOP, MSG_RECONFIGURE,
+  MSG_READY, MSG_EVAL, MSG_ERROR, MSG_POSITION, MSG_STOP,
+  SEARCH_DEPTH,
 } from '../../src/constants.js';
 
 let latestWorker;
@@ -111,7 +112,7 @@ describe('Engine', () => {
 
       expect(engine.state).toBe('analyzing');
       expect(engine.currentFen).toBe('fen1');
-      expect(latestWorker.postMessage).toHaveBeenCalledWith({ type: MSG_POSITION, fen: 'fen1' });
+      expect(latestWorker.postMessage).toHaveBeenCalledWith({ type: MSG_POSITION, fen: 'fen1', depth: SEARCH_DEPTH });
       engine.destroy();
     });
 
@@ -177,36 +178,23 @@ describe('Engine', () => {
     });
   });
 
-  describe('reconfigure', () => {
-    it('posts MSG_RECONFIGURE and clears currentFen', async () => {
+  describe('depth', () => {
+    it('sends the depth from init with each position', async () => {
       const engine = new Engine();
-      await engine.init();
+      await engine.init({ searchDepth: 18 });
       latestWorker.onmessage({ data: { type: MSG_READY } });
       engine.analyze('fen1');
-
-      engine.reconfigure({ searchDepth: 20 });
-
-      expect(latestWorker.postMessage).toHaveBeenCalledWith({
-        type: MSG_RECONFIGURE,
-        searchDepth: 20,
-      });
-      expect(engine.currentFen).toBeNull();
+      expect(latestWorker.postMessage).toHaveBeenLastCalledWith({ type: MSG_POSITION, fen: 'fen1', depth: 18 });
       engine.destroy();
     });
 
-    it('is a no-op when state is IDLE', () => {
+    it('uses a changed depth for the next position', async () => {
       const engine = new Engine();
-      engine.reconfigure({ searchDepth: 20 });
-      expect(engine.state).toBe('idle');
-    });
-
-    it('is a no-op when state is INITIALIZING', async () => {
-      const engine = new Engine();
-      await engine.init();
-      // state is initializing (waiting for MSG_READY), not READY
-      engine.reconfigure({ searchDepth: 20 });
-      const reconfigCalls = latestWorker.postMessage.mock.calls.filter((c) => c[0] && c[0].type === MSG_RECONFIGURE);
-      expect(reconfigCalls.length).toBe(0);
+      await engine.init({ searchDepth: 18 });
+      latestWorker.onmessage({ data: { type: MSG_READY } });
+      engine.setDepth(12);
+      engine.analyze('fen1');
+      expect(latestWorker.postMessage).toHaveBeenLastCalledWith({ type: MSG_POSITION, fen: 'fen1', depth: 12 });
       engine.destroy();
     });
   });
@@ -320,7 +308,7 @@ describe('Engine', () => {
       await vi.advanceTimersByTimeAsync(1100);
 
       latestWorker.onmessage({ data: { type: MSG_READY } });
-      expect(latestWorker.postMessage).toHaveBeenLastCalledWith({ type: MSG_POSITION, fen: 'fen1' });
+      expect(latestWorker.postMessage).toHaveBeenLastCalledWith({ type: MSG_POSITION, fen: 'fen1', depth: SEARCH_DEPTH });
       vi.useRealTimers();
       engine.destroy();
     });
@@ -336,7 +324,7 @@ describe('Engine', () => {
       await vi.advanceTimersByTimeAsync(1100);
 
       latestWorker.onmessage({ data: { type: MSG_READY } });
-      expect(latestWorker.postMessage).toHaveBeenLastCalledWith({ type: MSG_POSITION, fen: 'fen2' });
+      expect(latestWorker.postMessage).toHaveBeenLastCalledWith({ type: MSG_POSITION, fen: 'fen2', depth: SEARCH_DEPTH });
       vi.useRealTimers();
       engine.destroy();
     });

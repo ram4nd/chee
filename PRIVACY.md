@@ -21,4 +21,4 @@ Chee does not communicate with any external server. There are no analytics, trac
 
 ## Contact
 
-If you have questions about this policy, open an issue at https://github.com/hong4rc/chee/issues.
+If you have questions about this policy, open an issue at https://github.com/ram4nd/chee/issues.

@@ -2,8 +2,7 @@
 // Stockfish Web Worker (blob-compatible, single-threaded)
 // Globals __sfCode and __wasmBinary are injected by the bootstrap before this runs.
 
-// ─── Engine config (overridden by setup message) ────────────
-let SEARCH_DEPTH = 22;
+// ─── Engine config ───────────────────────────────────────────
 const HASH_SIZE_MB = 16;
 
 // ─── UCI tokens ──────────────────────────────────────────────
@@ -22,17 +21,15 @@ const MSG_EVAL = 'eval';
 const MSG_ERROR = 'error';
 const MSG_POSITION = 'position';
 const MSG_STOP = 'stop';
-const MSG_RECONFIGURE = 'reconfigure';
 
 // ─── State ───────────────────────────────────────────────────
 let currentScore = null; // { score, mate } from the latest info line
 let currentDepth = 0;
 let analyzing = false;
 let stopped = false; // search was interrupted, so its result is not worth reporting
-let reconfiguring = false;
 let isReady = false;
 let sfOnMessage = null;
-let pendingFen = null;
+let pending = null; // { fen, depth } waiting for the current search to stop
 let activeFen = null;
 const realPostMessage = self.postMessage.bind(self);
 
@@ -60,7 +57,7 @@ function parseInfoLine(line) {
 
 let awaitingReady = false; // waiting for readyok before starting new analysis
 
-function startAnalysis(fen) {
+function startAnalysis({ fen, depth }) {
   currentScore = null;
   currentDepth = 0;
   analyzing = true;
@@ -69,12 +66,12 @@ function startAnalysis(fen) {
   activeFen = fen;
 
   sendUCI(`position fen ${fen}`);
-  sendUCI(`go depth ${SEARCH_DEPTH}`);
+  sendUCI(`go depth ${depth}`);
 }
 
 // After stop+bestmove, sync with isready/readyok before new analysis
 function syncBeforeNext() {
-  if (pendingFen) {
+  if (pending) {
     awaitingReady = true;
     sendUCI('isready');
   }
@@ -88,12 +85,11 @@ function onStockfishMessage(line) {
       realPostMessage({ type: MSG_READY });
     }
 
-    reconfiguring = false;
-    if (awaitingReady && pendingFen) {
+    if (awaitingReady && pending) {
       awaitingReady = false;
-      const readyFen = pendingFen;
-      pendingFen = null;
-      startAnalysis(readyFen);
+      const next = pending;
+      pending = null;
+      startAnalysis(next);
     }
     return;
   }
@@ -103,12 +99,11 @@ function onStockfishMessage(line) {
   }
 
   if (line.indexOf(UCI_INFO) === 0 && line.indexOf(UCI_SCORE) !== -1) {
-    if (!reconfiguring) parseInfoLine(line);
+    parseInfoLine(line);
     return;
   }
 
   if (line.indexOf(UCI_BESTMOVE) === 0) {
-    if (reconfiguring) return;
     analyzing = false;
     // One message per finished search
     if (!stopped && currentScore) {
@@ -140,29 +135,26 @@ function requestStop() {
   }
 }
 
-function analyzePosition(fen) {
+function analyzePosition(request) {
   if (!isReady) {
-    pendingFen = fen;
+    pending = request;
     return;
   }
   // If analyzing or waiting for readyok, queue and stop
   if (analyzing || awaitingReady) {
-    pendingFen = fen;
+    pending = request;
     if (analyzing) sendStop();
     return;
   }
-  startAnalysis(fen);
+  startAnalysis(request);
 }
 
 function stopAnalysis() {
-  pendingFen = null;
+  pending = null;
   requestStop();
 }
 
 function bootstrapStockfish() {
-  // Apply config from setup message
-  if (self.__searchDepth) SEARCH_DEPTH = self.__searchDepth;
-
   // Override fetch to serve WASM binary from memory
   const origFetch = self.fetch.bind(self);
   self.fetch = (url, opts) => {
@@ -207,20 +199,9 @@ function bootstrapStockfish() {
   self.onmessage = (e) => {
     const msg = e.data;
     if (msg.type === MSG_POSITION) {
-      analyzePosition(msg.fen);
+      analyzePosition({ fen: msg.fen, depth: msg.depth });
     } else if (msg.type === MSG_STOP) {
       stopAnalysis();
-    } else if (msg.type === MSG_RECONFIGURE) {
-      reconfiguring = true;
-      if (analyzing) sendStop();
-      if (msg.searchDepth != null) SEARCH_DEPTH = msg.searchDepth;
-      currentScore = null;
-      currentDepth = 0;
-      analyzing = false;
-      awaitingReady = false;
-      pendingFen = null;
-      activeFen = null;
-      sendUCI('isready');
     }
   };
 

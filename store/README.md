@@ -5,7 +5,7 @@ This directory contains assets for the Chrome Web Store (CWS) listing. These are
 ## Contents
 
 - `description.txt` — Full store listing description
-- `screenshots/` — Store listing screenshots (1280x800 or 640x400)
+- `screenshots/`: none yet; the old ones showed the removed live panel
 
 ## Creating screenshots
 

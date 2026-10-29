@@ -3,11 +3,11 @@
 // Specific: localStorage.debug = 'chee:engine,chee:panel'
 // Disable: localStorage.removeItem('debug')
 
-import { includes, some } from 'lodash-es';
+import { includes, some, forEach } from 'lodash-es';
 
 const PREFIX = 'chee';
 
-let enabledNamespaces = null;
+let enabledNamespaces = [];
 
 function parseDebugFlag() {
   try {
@@ -20,13 +20,10 @@ parseDebugFlag();
 try { window.addEventListener('storage', parseDebugFlag); } catch { /* no window */ }
 
 function isEnabled(namespace) {
-  if (!enabledNamespaces || enabledNamespaces.length === 0) return false;
-  return some(enabledNamespaces, (p) => {
-    if (p === '*' || p === `${PREFIX}:*`) return true;
-    return includes(namespace, p) || p === namespace;
-  });
+  return some(enabledNamespaces, (p) => p === '*' || p === `${PREFIX}:*` || includes(namespace, p));
 }
 
+const LEVELS = [['INF', 'info'], ['WRN', 'warn'], ['ERR', 'error']];
 const LOG_BUFFER_SIZE = 200;
 const ringBuffer = new Array(LOG_BUFFER_SIZE);
 let ringHead = 0;
@@ -44,9 +41,7 @@ export function getLogBuffer() {
   return ringBuffer.slice(ringHead).concat(ringBuffer.slice(0, ringHead));
 }
 
-export function refreshDebugFlag() {
-  parseDebugFlag();
-}
+export { parseDebugFlag as refreshDebugFlag };
 
 const cache = new Map();
 
@@ -55,29 +50,14 @@ export default function createDebug(namespace) {
 
   const tag = `[${namespace}]`;
 
-  const log = (...args) => {
-    pushLog('DBG', tag, args);
-    if (!isEnabled(namespace)) return;
-    console.log(tag, ...args); // eslint-disable-line no-console
+  // Always buffered for "Copy debug info"; printed only when enabled
+  const logger = (level, method) => (...args) => {
+    pushLog(level, tag, args);
+    if (isEnabled(namespace)) console[method](tag, ...args); // eslint-disable-line no-console
   };
 
-  log.info = (...args) => {
-    pushLog('INF', tag, args);
-    if (!isEnabled(namespace)) return;
-    console.info(tag, ...args); // eslint-disable-line no-console
-  };
-
-  log.warn = (...args) => {
-    pushLog('WRN', tag, args);
-    if (!isEnabled(namespace)) return;
-    console.warn(tag, ...args); // eslint-disable-line no-console
-  };
-
-  log.error = (...args) => {
-    pushLog('ERR', tag, args);
-    if (!isEnabled(namespace)) return;
-    console.error(tag, ...args); // eslint-disable-line no-console
-  };
+  const log = logger('DBG', 'log');
+  forEach(LEVELS, ([level, method]) => { log[method] = logger(level, method); });
 
   log.enabled = () => isEnabled(namespace);
 
