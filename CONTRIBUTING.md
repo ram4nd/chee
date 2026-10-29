@@ -5,7 +5,6 @@
 ```bash
 git clone https://github.com/ram4nd/chee.git
 cd chee
-git checkout eval-chart-only
 npm install
 npm run build
 ```

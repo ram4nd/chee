@@ -9,7 +9,6 @@ This is a fork of [hong4rc/chee](https://github.com/hong4rc/chee), reworked from
 ```bash
 git clone git@github.com:ram4nd/chee.git
 cd chee
-git checkout eval-chart-only
 npm install
 npm run build
 ```
