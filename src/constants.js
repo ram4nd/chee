@@ -1,41 +1,9 @@
 // ─── Chess ────────────────────────────────────────────────────
-export const BOARD_SIZE = 8;
-export const LAST_RANK = 7; // BOARD_SIZE - 1, used for rank flipping
-export const FILES = 'abcdefgh';
-export const FEN_NONE = '-'; // FEN placeholder for empty castling/en passant
-
-// Piece characters
-export const WHITE_KING = 'K';
-export const WHITE_QUEEN = 'Q';
-export const WHITE_ROOK = 'R';
-export const WHITE_BISHOP = 'B';
-export const WHITE_KNIGHT = 'N';
-export const WHITE_PAWN = 'P';
-export const BLACK_KING = 'k';
-export const BLACK_QUEEN = 'q';
-export const BLACK_ROOK = 'r';
-export const BLACK_BISHOP = 'b';
-export const BLACK_KNIGHT = 'n';
-export const BLACK_PAWN = 'p';
-
-// Turn
 export const TURN_WHITE = 'w';
 export const TURN_BLACK = 'b';
 
-// Castling positions (file indices)
-export const KING_START_FILE = 4;
-export const KINGSIDE_ROOK_FILE = 7;
-export const QUEENSIDE_ROOK_FILE = 0;
-
-// Board array row indices (rank 1 = row 7, rank 8 = row 0)
-export const WHITE_BACK_ROW = 7;
-export const BLACK_BACK_ROW = 0;
-
 // ─── Timing ──────────────────────────────────────────────────
 export const DEBOUNCE_MS = 100;
-export const POLL_INTERVAL_MS = 500;
-export const BOARD_TIMEOUT_MS = 60000;
-export const MAX_PIECE_ATTEMPTS = 60;
 
 // ─── Engine resources ────────────────────────────────────────
 export const WORKER_FILE = 'stockfish-worker.js';
@@ -57,34 +25,35 @@ export const MSG_STOP = 'stop';
 export const MSG_RECONFIGURE = 'reconfigure';
 
 // ─── Engine config ───────────────────────────────────────────
-export const SEARCH_DEPTH = 22;
+export const SEARCH_DEPTH = 15;
 export const SETTINGS_DEFAULTS = {
   searchDepth: SEARCH_DEPTH,
   theme: 'site',
   panelMinimized: false,
-  panelHidden: false,
-  panelLeft: null,
-  panelTop: null,
-  panelWidth: null,
   debugMode: false,
 };
 
 // ─── Panel / eval display ────────────────────────────────────
 export const PANEL_ID = 'chee-analysis-panel';
-export const NUM_LINES = 1; // MultiPV: the chart only needs the top line
 export const CENTIPAWN_DIVISOR = 100;
 export const MATE_PREFIX = 'M';
 export const MATE_NEG_PREFIX = '-M';
 
-// ─── DOM exploration limits ──────────────────────────────────
-export const MAX_EXPLORE_CHILDREN = 30;
-export const MAX_EXPLORE_DEPTH = 3;
-export const MAX_EXPLORE_DEPTH_LAYOUT = 4;
-export const MAX_LOG_SAMPLES = 3;
-export const MAX_ATTR_DISPLAY_LEN = 40;
-export const MAX_CLASS_DISPLAY_LEN = 80;
-export const MIN_PIECE_CONTAINER_COUNT = 2;
-
-// ─── chess.com square class ──────────────────────────────────
-export const SQUARE_PREFIX = 'square-';
-export const SQUARE_CLASS_MIN_LEN = 9; // 'square-' (7) + 2 digits
+// ─── Review ──────────────────────────────────────────────────
+// Scores are capped here before computing winning chances, like lichess
+export const MATE_CP = 1000;
+export const SEVERITY_INACCURACY = 'inaccuracy';
+export const SEVERITY_MISTAKE = 'mistake';
+export const SEVERITY_BLUNDER = 'blunder';
+// Minimum drop in the mover's winning chances (percentage points) per severity, worst first
+export const SEVERITY_THRESHOLDS = [
+  {
+    severity: SEVERITY_BLUNDER, drop: 30, glyph: '??', plural: 'blunders',
+  },
+  {
+    severity: SEVERITY_MISTAKE, drop: 20, glyph: '?', plural: 'mistakes',
+  },
+  {
+    severity: SEVERITY_INACCURACY, drop: 10, glyph: '?!', plural: 'inaccuracies',
+  },
+];

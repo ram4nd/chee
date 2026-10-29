@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Chee - Live Eval Chart",
+  "name": "Chee - Game Review Chart",
   "version": "2.0.1",
-  "description": "Live Stockfish eval chart on chess.com and lichess",
+  "description": "Stockfish eval chart and your mistakes on chess.com, shown only after the game ends",
   "homepage_url": "https://github.com/hong4rc/chee",
   "permissions": [
     "storage"
@@ -25,8 +25,7 @@
       "matches": [
         "*://www.chess.com/game/*",
         "*://www.chess.com/play/*",
-        "*://www.chess.com/daily/*",
-        "*://lichess.org/*"
+        "*://www.chess.com/daily/*"
       ],
       "js": [
         "content.js"
@@ -45,8 +44,7 @@
         "stockfish-worker.js"
       ],
       "matches": [
-        "*://www.chess.com/*",
-        "*://lichess.org/*"
+        "*://www.chess.com/*"
       ]
     }
   ]

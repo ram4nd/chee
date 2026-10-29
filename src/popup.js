@@ -1,4 +1,4 @@
-import { toInteger, omit } from 'lodash-es';
+import { toInteger } from 'lodash-es';
 import { loadSettings } from './lib/settings.js';
 import { applyTheme } from './lib/themes.js';
 import { SETTINGS_DEFAULTS } from './constants.js';
@@ -61,7 +61,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         `Chee v${version} (${__COMMIT_HASH__})`,
         `Browser: ${navigator.userAgent}`,
         `Settings (non-default): ${JSON.stringify(changed)}`,
-        `All settings: ${JSON.stringify(omit(current, ['panelLeft', 'panelTop', 'panelWidth']))}`,
+        `All settings: ${JSON.stringify(current)}`,
       ];
 
       // Query active tab for page-specific info
@@ -73,9 +73,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             sections.push('');
             sections.push('--- Page State ---');
             sections.push(`URL: ${page.url}`);
-            sections.push(`Adapter: ${page.adapter}`);
             sections.push(`Engine: ${page.engineState}, FEN: ${page.engineFen || 'none'}`);
-            sections.push(`Board: ${page.boardFound ? 'found' : 'missing'}, Ply: ${page.ply}, Turn: ${page.turn}`);
+            sections.push(`Game over: ${page.gameOver}, Moves: ${page.moves}, Ply: ${page.ply}`);
             if (page.logs && page.logs.length > 0) {
               sections.push('');
               sections.push('--- Recent Logs ---');

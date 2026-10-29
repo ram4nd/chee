@@ -19,11 +19,6 @@ const State = Object.freeze({
   ERROR: 'error',
 });
 
-// Stale eval guard: when a new position is requested, Stockfish restarts from
-// depth 1. Any queued eval messages from the previous analysis have high depth.
-// Reject eval with depth above this threshold until a low-depth eval confirms
-// the fresh analysis has started.
-const STALE_DEPTH_THRESHOLD = 2;
 const MAX_RECOVER_ATTEMPTS = 2;
 
 export class Engine extends Emitter {
@@ -34,7 +29,6 @@ export class Engine extends Emitter {
     this._currentFen = null;
     this._pendingFen = null;
     this._recoverTimer = null;
-    this._depthGuard = false;
     this._recoverAttempts = 0;
     this._recoverFen = null;
   }
@@ -65,7 +59,6 @@ export class Engine extends Emitter {
         '    self.removeEventListener("message", __h);',
         '    self.__sfCode = e.data.sfCode;',
         '    self.__wasmBinary = e.data.wasmBinary;',
-        '    self.__numLines = e.data.numLines;',
         '    self.__searchDepth = e.data.searchDepth;',
         '    try { (0, eval)(e.data.workerCode); }',
         `    catch(err) { self.postMessage({ type: "${MSG_ERROR}", message: "Worker eval failed: " + err.message }); }`,
@@ -76,7 +69,8 @@ export class Engine extends Emitter {
       const blob = new Blob([bootstrap], { type: 'application/javascript' });
       const blobUrl = URL.createObjectURL(blob);
 
-      this._worker = new Worker(blobUrl);
+      // stockfish.js reads its wasm path from the worker URL hash; the worker serves that file from memory
+      this._worker = new Worker(`${blobUrl}#${STOCKFISH_WASM_FILE}`);
       URL.revokeObjectURL(blobUrl);
       log.info('blob worker created');
 
@@ -94,7 +88,6 @@ export class Engine extends Emitter {
         workerCode,
         sfCode,
         wasmBinary: wasmBuf,
-        numLines: settings.numLines,
         searchDepth: settings.searchDepth,
       }, [wasmBuf]);
 
@@ -106,26 +99,17 @@ export class Engine extends Emitter {
     }
   }
 
-  analyze(fen, searchmoves) {
+  analyze(fen) {
     if (this._state === State.INITIALIZING) {
       this._pendingFen = fen;
       return;
     }
     if (!this._worker) return;
-    if (fen === this._currentFen) return;
 
     log('analyzing:', fen);
     this._state = State.ANALYZING;
     this._currentFen = fen;
-    this._depthGuard = true;
-    const msg = { type: MSG_POSITION, fen };
-    if (searchmoves) msg.searchmoves = searchmoves;
-    this._worker.postMessage(msg);
-  }
-
-  forceAnalyze(fen, searchmoves) {
-    this._currentFen = null;
-    this.analyze(fen, searchmoves);
+    this._worker.postMessage({ type: MSG_POSITION, fen });
   }
 
   stop() {
@@ -140,14 +124,12 @@ export class Engine extends Emitter {
   reconfigure(settings) {
     if (!this._worker || this._state === State.IDLE || this._state === State.INITIALIZING
       || this._state === State.ERROR) return;
-    log.info(`reconfiguring engine: lines:${settings.numLines} depth:${settings.searchDepth}`);
+    log.info(`reconfiguring engine: depth:${settings.searchDepth}`);
     this._worker.postMessage({
       type: MSG_RECONFIGURE,
-      numLines: settings.numLines,
       searchDepth: settings.searchDepth,
     });
     this._currentFen = null;
-    this._depthGuard = true;
   }
 
   destroy() {
@@ -207,22 +189,10 @@ export class Engine extends Emitter {
         this.analyze(fen);
       }
     } else if (msg.type === MSG_EVAL) {
-      if (msg.fen && msg.fen !== this._currentFen) {
-        log('dropping eval for wrong FEN');
-        return;
-      }
-      if (this._depthGuard) {
-        if (msg.depth > STALE_DEPTH_THRESHOLD) {
-          log('dropping stale eval, depth:', msg.depth);
-          return;
-        }
-        this._depthGuard = false;
-      }
-      if (msg.complete) {
-        this._state = State.READY;
-        this._recoverAttempts = 0;
-        this._recoverFen = null;
-      }
+      // Results are matched to positions by the caller via msg.fen
+      this._state = State.READY;
+      this._recoverAttempts = 0;
+      this._recoverFen = null;
       this.emit(EVT_EVAL, msg);
     } else if (msg.type === MSG_ERROR) {
       log.error('worker error:', msg.message);

@@ -1,41 +1,38 @@
-// Chart sub-renderer: SVG area chart plotting white-perspective eval at each ply.
+// Chart sub-renderer: SVG area chart of the white-perspective eval at each ply, with mistake markers.
 
-import { forEach, sortedIndex } from 'lodash-es';
+import { forEach, clamp } from 'lodash-es';
 import { el, svgEl } from '../../lib/dom.js';
-import {
-  TURN_BLACK, CENTIPAWN_DIVISOR, MATE_PREFIX, MATE_NEG_PREFIX,
-} from '../../constants.js';
-import { formatCp } from '../../lib/format.js';
+import { formatScore } from '../../lib/format.js';
+import { plyLabel } from '../review.js';
 
 const CHART_VB_W = 200;
 const CHART_VB_H = 40;
 const CHART_MAX_CP = 500;
+const START_LABEL = 'Start';
 
 export class ChartRenderer {
   constructor() {
-    this._scores = new Map();
-    this._sortedPlies = [];
-    this._chartSvg = null;
-    this._chartWhite = null;
-    this._chartCursor = null;
-    this._tooltip = null;
+    this._scores = [];
+    this._total = 0;
     this._container = null;
+    this._chartWhite = null;
+    this._cursor = null;
+    this._markers = null;
+    this._tooltip = null;
+    this.onSeek = null;
   }
 
   createDOM() {
-    const container = el('div', 'chee-chart');
+    this._container = el('div', 'chee-chart');
     const svg = svgEl('svg', {
       viewBox: `0 0 ${CHART_VB_W} ${CHART_VB_H}`,
       preserveAspectRatio: 'none',
     });
     // Background (black's territory)
-    svg.appendChild(svgEl('rect', {
-      width: CHART_VB_W, height: CHART_VB_H, fill: '#2a2a2a',
-    }));
+    svg.appendChild(svgEl('rect', { class: 'chee-chart-bg', width: CHART_VB_W, height: CHART_VB_H }));
     // White area path (filled from bottom up to score line)
-    const whitePath = svgEl('path', { class: 'chee-chart-white', d: '' });
-    svg.appendChild(whitePath);
-    // Zero line
+    this._chartWhite = svgEl('path', { class: 'chee-chart-white', d: '' });
+    svg.appendChild(this._chartWhite);
     svg.appendChild(svgEl('line', {
       class: 'chee-chart-zero',
       x1: 0,
@@ -43,143 +40,81 @@ export class ChartRenderer {
       x2: CHART_VB_W,
       y2: CHART_VB_H / 2,
     }));
-    // Current ply cursor
-    svg.appendChild(svgEl('line', {
-      class: 'chee-chart-cursor',
-      x1: 0,
-      y1: 0,
-      x2: 0,
-      y2: CHART_VB_H,
-    }));
-    const tooltip = el('div', 'chee-chart-tooltip');
-    container.appendChild(svg);
-    container.appendChild(tooltip);
-    return container;
-  }
-
-  bind(panelEl) {
-    this._container = panelEl.querySelector('.chee-chart');
-    this._chartSvg = panelEl.querySelector('.chee-chart svg');
-    this._chartWhite = this._chartSvg?.querySelector('.chee-chart-white');
-    this._chartCursor = this._chartSvg?.querySelector('.chee-chart-cursor');
-    this._tooltip = panelEl.querySelector('.chee-chart-tooltip');
-    if (this._container) {
-      this._container.addEventListener('mousemove', (e) => this._onMouseMove(e));
-      this._container.addEventListener('mouseleave', () => this._hideTooltip());
-    }
-  }
-
-  recordScore(ply, data, turn) {
-    if (!data.lines || data.lines.length === 0) return;
-    const line = data.lines[0];
-    let whiteScore;
-    if (line.mate !== null) {
-      const wMate = turn === TURN_BLACK ? -line.mate : line.mate;
-      whiteScore = wMate > 0 ? CHART_MAX_CP : -CHART_MAX_CP;
-    } else {
-      whiteScore = turn === TURN_BLACK ? -line.score : line.score;
-    }
-    const isNew = !this._scores.has(ply);
-    this._scores.set(ply, whiteScore);
-    if (isNew) this._insertSortedPly(ply);
-    this._renderChart(ply);
-  }
-
-  _insertSortedPly(ply) {
-    const idx = sortedIndex(this._sortedPlies, ply);
-    this._sortedPlies.splice(idx, 0, ply);
-  }
-
-  _renderChart(currentPly) {
-    if (!this._chartSvg) return;
-
-    const plies = this._sortedPlies;
-    if (plies.length === 0) {
-      if (this._chartWhite) this._chartWhite.setAttribute('d', '');
-      if (this._chartCursor) {
-        this._chartCursor.setAttribute('x1', 0);
-        this._chartCursor.setAttribute('x2', 0);
-      }
-      return;
-    }
-
-    const minPly = plies[0];
-    const maxPly = Math.max(plies[plies.length - 1], minPly + 1);
-    const plyRange = maxPly - minPly;
-    const centerY = CHART_VB_H / 2;
-
-    const xPos = (ply) => ((ply - minPly) / plyRange) * CHART_VB_W;
-    const yPos = (cp) => {
-      const clamped = Math.max(-CHART_MAX_CP, Math.min(CHART_MAX_CP, cp));
-      return centerY - (clamped / CHART_MAX_CP) * centerY;
-    };
-
-    // White area: bottom → score line → bottom
-    const first = this._scores.get(plies[0]);
-    let d = `M 0 ${CHART_VB_H} L 0 ${yPos(first)}`;
-    forEach(plies, (ply) => {
-      d += ` L ${xPos(ply)} ${yPos(this._scores.get(ply))}`;
+    // Markers and cursor are HTML so they keep their shape when the SVG stretches
+    this._cursor = el('div', 'chee-chart-cursor');
+    this._markers = el('div', 'chee-chart-markers');
+    this._tooltip = el('div', 'chee-chart-tooltip');
+    this._container.append(svg, this._cursor, this._markers, this._tooltip);
+    this._container.addEventListener('mousemove', (e) => this._onMouseMove(e));
+    this._container.addEventListener('mouseleave', () => { this._tooltip.style.display = 'none'; });
+    this._container.addEventListener('click', (e) => {
+      if (this.onSeek && this._total > 0) this.onSeek(this._plyAt(e));
     });
-    const last = this._scores.get(plies[plies.length - 1]);
-    d += ` L ${CHART_VB_W} ${yPos(last)} L ${CHART_VB_W} ${CHART_VB_H} Z`;
-    if (this._chartWhite) this._chartWhite.setAttribute('d', d);
+    return this._container;
+  }
 
-    // Cursor at current ply
-    if (this._chartCursor && currentPly !== undefined) {
-      const cx = plies.length === 1 ? CHART_VB_W / 2 : xPos(currentPly);
-      this._chartCursor.setAttribute('x1', cx);
-      this._chartCursor.setAttribute('x2', cx);
-    }
+  _xPct(ply) {
+    return this._total > 1 ? (ply / (this._total - 1)) * 100 : 50;
+  }
+
+  _yPct(cp) {
+    return 50 - (clamp(cp, -CHART_MAX_CP, CHART_MAX_CP) / CHART_MAX_CP) * 50;
+  }
+
+  // scores[ply] = white-perspective centipawns, or undefined while not analysed
+  render(scores, total, cursor) {
+    this._scores = scores;
+    this._total = total;
+    const toX = (ply) => (this._xPct(ply) / 100) * CHART_VB_W;
+    const toY = (cp) => (this._yPct(cp) / 100) * CHART_VB_H;
+
+    let d = '';
+    let lastX = 0;
+    forEach(scores, (cp, ply) => {
+      if (cp === undefined) return;
+      const x = toX(ply);
+      d += d ? ` L ${x} ${toY(cp)}` : `M ${x} ${CHART_VB_H} L ${x} ${toY(cp)}`;
+      lastX = x;
+    });
+    this._chartWhite.setAttribute('d', d ? `${d} L ${lastX} ${CHART_VB_H} Z` : '');
+
+    this._cursor.style.display = total > 0 ? 'block' : 'none';
+    this._cursor.style.left = `${this._xPct(cursor)}%`;
+  }
+
+  // mistakes: [{ ply, severity, after }]
+  setMarkers(mistakes) {
+    this._markers.replaceChildren(...mistakes.map((m) => {
+      const dot = el('div', `chee-chart-marker chee-${m.severity}`);
+      dot.style.left = `${this._xPct(m.ply)}%`;
+      dot.style.top = `${this._yPct(m.after)}%`;
+      return dot;
+    }));
+  }
+
+  _plyAt(e) {
+    const rect = this._container.getBoundingClientRect();
+    const ratio = clamp((e.clientX - rect.left) / rect.width, 0, 1);
+    return Math.round(ratio * (this._total - 1));
   }
 
   _onMouseMove(e) {
-    if (!this._container || this._sortedPlies.length === 0) return;
-    const rect = this._container.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const pct = x / rect.width;
-
-    const plies = this._sortedPlies;
-    const minPly = plies[0];
-    const maxPly = Math.max(plies[plies.length - 1], minPly + 1);
-    const hoveredPly = Math.round(minPly + pct * (maxPly - minPly));
-
-    // Find closest ply with data
-    let closest = plies[0];
-    let closestDist = Math.abs(hoveredPly - closest);
-    for (let i = 1; i < plies.length; i++) {
-      const dist = Math.abs(hoveredPly - plies[i]);
-      if (dist < closestDist) {
-        closest = plies[i];
-        closestDist = dist;
-      }
-    }
-
-    const cp = this._scores.get(closest);
-    if (cp === undefined || !this._tooltip) return;
-
-    const moveNum = Math.floor(closest / 2) + 1;
-    const side = closest % 2 === 0 ? '.' : '...';
-    let score;
-    if (Math.abs(cp) >= CHART_MAX_CP) {
-      score = cp > 0 ? MATE_PREFIX : MATE_NEG_PREFIX;
-    } else {
-      score = formatCp(cp / CENTIPAWN_DIVISOR);
-    }
-    this._tooltip.textContent = `${moveNum}${side} ${score}`;
-    this._tooltip.style.left = `${x}px`;
+    if (this._total === 0) return;
+    const ply = this._plyAt(e);
+    const cp = this._scores[ply];
+    const label = ply === 0 ? START_LABEL : plyLabel(ply);
+    this._tooltip.textContent = cp === undefined ? label : `${label} ${formatScore(cp)}`;
+    this._tooltip.style.left = `${this._xPct(ply)}%`;
     this._tooltip.style.display = 'block';
   }
 
-  _hideTooltip() {
-    if (this._tooltip) this._tooltip.style.display = 'none';
-  }
-
   destroy() {
-    this._scores.clear();
-    this._sortedPlies = [];
-    this._chartSvg = null;
+    this._scores = [];
+    this._total = 0;
+    this._container = null;
     this._chartWhite = null;
-    this._chartCursor = null;
+    this._cursor = null;
+    this._markers = null;
     this._tooltip = null;
   }
 }

@@ -56,7 +56,7 @@ describe('Engine', () => {
       const engine = new Engine();
       expect(engine.state).toBe('idle');
 
-      await engine.init({ numLines: 3, searchDepth: 22 });
+      await engine.init({ searchDepth: 22 });
       expect(engine.state).not.toBe('idle');
 
       latestWorker.onmessage({ data: { type: MSG_READY } });
@@ -114,15 +114,15 @@ describe('Engine', () => {
       engine.destroy();
     });
 
-    it('is a no-op for same FEN', async () => {
+    it('analyses the same FEN again when asked', async () => {
       const engine = new Engine();
       await engine.init();
       latestWorker.onmessage({ data: { type: MSG_READY } });
 
       engine.analyze('fen1');
-      const count = latestWorker.postMessage.mock.calls.length;
       engine.analyze('fen1');
-      expect(latestWorker.postMessage.mock.calls.length).toBe(count);
+      const positions = latestWorker.postMessage.mock.calls.filter((c) => c[0].type === MSG_POSITION);
+      expect(positions).toHaveLength(2);
       engine.destroy();
     });
 
@@ -183,11 +183,10 @@ describe('Engine', () => {
       latestWorker.onmessage({ data: { type: MSG_READY } });
       engine.analyze('fen1');
 
-      engine.reconfigure({ numLines: 5, searchDepth: 20 });
+      engine.reconfigure({ searchDepth: 20 });
 
       expect(latestWorker.postMessage).toHaveBeenCalledWith({
         type: MSG_RECONFIGURE,
-        numLines: 5,
         searchDepth: 20,
       });
       expect(engine.currentFen).toBeNull();
@@ -196,7 +195,7 @@ describe('Engine', () => {
 
     it('is a no-op when state is IDLE', () => {
       const engine = new Engine();
-      engine.reconfigure({ numLines: 3 });
+      engine.reconfigure({ searchDepth: 20 });
       expect(engine.state).toBe('idle');
     });
 
@@ -204,7 +203,7 @@ describe('Engine', () => {
       const engine = new Engine();
       await engine.init();
       // state is initializing (waiting for MSG_READY), not READY
-      engine.reconfigure({ numLines: 3 });
+      engine.reconfigure({ searchDepth: 20 });
       const reconfigCalls = latestWorker.postMessage.mock.calls.filter((c) => c[0] && c[0].type === MSG_RECONFIGURE);
       expect(reconfigCalls.length).toBe(0);
       engine.destroy();
@@ -220,39 +219,23 @@ describe('Engine', () => {
       await engine.init();
       latestWorker.onmessage({ data: { type: MSG_READY } });
       engine.analyze('fen1');
+      latestWorker.onmessage({
+        data: {
+          type: MSG_EVAL, fen: 'fen1', depth: 15, score: 30, mate: null,
+        },
+      });
 
-      // First low-depth to clear guard
-      latestWorker.onmessage({ data: { type: MSG_EVAL, depth: 1, lines: [] } });
-      latestWorker.onmessage({ data: { type: MSG_EVAL, depth: 15, lines: [{ score: 30 }] } });
-
-      expect(fn).toHaveBeenCalledTimes(2);
-      engine.destroy();
-    });
-
-    it('drops stale eval (high depth before low-depth reset)', async () => {
-      const engine = new Engine();
-      const fn = vi.fn();
-      engine.on(EVT_EVAL, fn);
-
-      await engine.init();
-      latestWorker.onmessage({ data: { type: MSG_READY } });
-      engine.analyze('fen1');
-
-      latestWorker.onmessage({ data: { type: MSG_EVAL, depth: 20, lines: [] } });
-      expect(fn).not.toHaveBeenCalled();
-
-      latestWorker.onmessage({ data: { type: MSG_EVAL, depth: 1, lines: [] } });
       expect(fn).toHaveBeenCalledTimes(1);
       engine.destroy();
     });
 
-    it('MSG_EVAL with complete=true sets state to ready', async () => {
+    it('MSG_EVAL sets state to ready', async () => {
       const engine = new Engine();
       await engine.init();
       latestWorker.onmessage({ data: { type: MSG_READY } });
       engine.analyze('fen1');
 
-      latestWorker.onmessage({ data: { type: MSG_EVAL, depth: 1, complete: true } });
+      latestWorker.onmessage({ data: { type: MSG_EVAL, depth: 1 } });
 
       expect(engine.state).toBe('ready');
       engine.destroy();

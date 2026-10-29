@@ -1,8 +1,11 @@
-Chee adds a live evaluation chart beside your chess games on Chess.com and Lichess.org.
+Chee reviews your Chess.com games once they are over: an evaluation chart of the whole game and a list of your mistakes, right above the move list.
 
-It runs Stockfish (one of the strongest chess engines) entirely in your browser using WebAssembly — no server, no account, no data sent anywhere.
+While a game is in progress Chee shows nothing and does not run the engine, so it never gives you outside help during play.
 
-• Eval chart — SVG area chart of the engine score at every move, with hover tooltip
-• Adjustable search depth (15–22 ply)
+It runs Stockfish (one of the strongest chess engines) entirely in your browser using WebAssembly: no server, no account, no data sent anywhere.
+
+• Eval chart of every move, with hover scores and click-to-jump
+• Your inaccuracies, mistakes and blunders, marked in the move list
+• Click a mistake to see the position before it and find the better move yourself; reveal the engine's move when ready
+• Adjustable search depth (12–20 ply)
 • Catppuccin themes or match the site's look
-• Draggable, resizable panel; Alt+C to hide/show

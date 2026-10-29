@@ -5,16 +5,14 @@
 // ─── Engine config (overridden by setup message) ────────────
 let SEARCH_DEPTH = 22;
 const HASH_SIZE_MB = 16;
-let NUM_LINES = 3;
 
 // ─── UCI tokens ──────────────────────────────────────────────
 const UCI_INFO = 'info';
 const UCI_BESTMOVE = 'bestmove';
 const UCI_READY_OK = 'readyok';
 const UCI_OK = 'uciok';
-const UCI_PV = ' pv ';
-const UCI_MULTIPV = 'multipv';
-const UCI_DEPTH = 'depth';
+const UCI_SCORE = ' score ';
+const UCI_DEPTH = /\bdepth (\d+)/;
 const UCI_SCORE_MATE = /score mate (-?\d+)/;
 const UCI_SCORE_CP = /score cp (-?\d+)/;
 
@@ -27,16 +25,15 @@ const MSG_STOP = 'stop';
 const MSG_RECONFIGURE = 'reconfigure';
 
 // ─── State ───────────────────────────────────────────────────
-let currentLines = Array(NUM_LINES).fill(null);
+let currentScore = null; // { score, mate } of the deepest line seen
 let currentDepth = 0;
 let analyzing = false;
+let stopped = false; // search was interrupted, so its result is not worth reporting
 let reconfiguring = false;
 let isReady = false;
 let sfOnMessage = null;
 let pendingFen = null;
-let pendingSearchMoves = null;
 let activeFen = null;
-let tempMultiPV = 0; // non-zero = temporary MultiPV override active
 const realPostMessage = self.postMessage.bind(self);
 
 function sendUCI(cmd) {
@@ -45,86 +42,34 @@ function sendUCI(cmd) {
   }
 }
 
-function extractInt(line, key) {
-  const regex = new RegExp(`\\b${key}\\s+(\\d+)`);
-  const match = line.match(regex);
-  return match ? parseInt(match[1], 10) : null;
-}
-
-function extractPV(line) {
-  const pvIndex = line.indexOf(UCI_PV);
-  if (pvIndex === -1) return [];
-  const pvStr = line.substring(pvIndex + UCI_PV.length).trim();
-  return pvStr.split(/\s+/);
-}
-
 function parseInfoLine(line) {
-  const depth = extractInt(line, UCI_DEPTH);
-  const multipv = extractInt(line, UCI_MULTIPV);
-  const pvMoves = extractPV(line);
-
-  if (depth === null || multipv === null || !pvMoves.length) return;
-
-  let score = null;
-  let mate = null;
+  const depthMatch = line.match(UCI_DEPTH);
+  if (!depthMatch) return;
+  const depth = parseInt(depthMatch[1], 10);
 
   const mateMatch = line.match(UCI_SCORE_MATE);
-  const cpMatch = line.match(UCI_SCORE_CP);
-
-  if (mateMatch) {
-    mate = parseInt(mateMatch[1], 10);
-  } else if (cpMatch) {
-    score = parseInt(cpMatch[1], 10);
-  } else {
-    return;
-  }
+  const cpMatch = mateMatch ? null : line.match(UCI_SCORE_CP);
+  if (!mateMatch && !cpMatch) return;
 
   currentDepth = Math.max(currentDepth, depth);
-
-  const lineData = {
-    depth,
-    score,
-    mate,
-    pv: pvMoves,
+  currentScore = {
+    score: cpMatch ? parseInt(cpMatch[1], 10) : null,
+    mate: mateMatch ? parseInt(mateMatch[1], 10) : null,
   };
-
-  const effectiveLines = tempMultiPV || NUM_LINES;
-  if (multipv >= 1 && multipv <= effectiveLines) {
-    currentLines[multipv - 1] = lineData;
-  }
-
-  // Only emit after the last MultiPV line for this depth is collected
-  if (multipv === effectiveLines) {
-    realPostMessage({
-      type: MSG_EVAL,
-      fen: activeFen,
-      depth,
-      lines: currentLines.filter(Boolean),
-      complete: false,
-    });
-  }
 }
 
 let awaitingReady = false; // waiting for readyok before starting new analysis
 
-function startAnalysis(fen, searchMoves) {
-  // When searchmoves is provided, temporarily raise MultiPV to cover all candidate moves
-  if (searchMoves && searchMoves.length > NUM_LINES) {
-    tempMultiPV = searchMoves.length;
-    sendUCI(`setoption name MultiPV value ${tempMultiPV}`);
-    currentLines = Array(tempMultiPV).fill(null);
-  } else {
-    currentLines = Array(NUM_LINES).fill(null);
-  }
+function startAnalysis(fen) {
+  currentScore = null;
   currentDepth = 0;
   analyzing = true;
+  stopped = false;
   awaitingReady = false;
   activeFen = fen;
 
   sendUCI(`position fen ${fen}`);
-  let goCmd = `go depth ${SEARCH_DEPTH}`;
-  if (searchMoves && searchMoves.length > 0) goCmd += ` searchmoves ${searchMoves.join(' ')}`;
-  sendUCI(goCmd);
+  sendUCI(`go depth ${SEARCH_DEPTH}`);
 }
 
 // After stop+bestmove, sync with isready/readyok before new analysis
@@ -147,10 +92,8 @@ function onStockfishMessage(line) {
     if (awaitingReady && pendingFen) {
       awaitingReady = false;
       const readyFen = pendingFen;
-      const readySearchMoves = pendingSearchMoves;
       pendingFen = null;
-      pendingSearchMoves = null;
-      startAnalysis(readyFen, readySearchMoves);
+      startAnalysis(readyFen);
     }
     return;
   }
@@ -159,7 +102,7 @@ function onStockfishMessage(line) {
     return;
   }
 
-  if (line.indexOf(UCI_INFO) === 0 && line.indexOf(UCI_MULTIPV) !== -1 && line.indexOf(UCI_PV) !== -1) {
+  if (line.indexOf(UCI_INFO) === 0 && line.indexOf(UCI_SCORE) !== -1) {
     if (!reconfiguring) parseInfoLine(line);
     return;
   }
@@ -167,18 +110,15 @@ function onStockfishMessage(line) {
   if (line.indexOf(UCI_BESTMOVE) === 0) {
     if (reconfiguring) return;
     analyzing = false;
-    realPostMessage({
-      type: MSG_EVAL,
-      fen: activeFen,
-      depth: currentDepth,
-      lines: currentLines.filter(Boolean),
-      complete: true,
-    });
-    // Restore MultiPV if we temporarily raised it for searchmoves
-    if (tempMultiPV) {
-      tempMultiPV = 0;
-      sendUCI(`setoption name MultiPV value ${NUM_LINES}`);
-      currentLines = Array(NUM_LINES).fill(null);
+    // One message per finished search
+    if (currentScore && !stopped) {
+      realPostMessage({
+        type: MSG_EVAL,
+        fen: activeFen,
+        depth: currentDepth,
+        ...currentScore,
+        bestmove: line.split(' ')[1] || null,
+      });
     }
 
     // Sync engine state before starting queued analysis
@@ -186,27 +126,30 @@ function onStockfishMessage(line) {
   }
 }
 
+function sendStop() {
+  stopped = true;
+  sendUCI('stop');
+}
+
 function requestStop() {
   if (analyzing) {
-    sendUCI('stop');
+    sendStop();
     // Don't set analyzing = false here — wait for bestmove
   }
 }
 
-function analyzePosition(fen, searchMoves) {
+function analyzePosition(fen) {
   if (!isReady) {
     pendingFen = fen;
-    pendingSearchMoves = searchMoves || null;
     return;
   }
   // If analyzing or waiting for readyok, queue and stop
   if (analyzing || awaitingReady) {
     pendingFen = fen;
-    pendingSearchMoves = searchMoves || null;
-    if (analyzing) sendUCI('stop');
+    if (analyzing) sendStop();
     return;
   }
-  startAnalysis(fen, searchMoves);
+  startAnalysis(fen);
 }
 
 function stopAnalysis() {
@@ -216,9 +159,7 @@ function stopAnalysis() {
 
 function bootstrapStockfish() {
   // Apply config from setup message
-  if (self.__numLines) NUM_LINES = self.__numLines;
   if (self.__searchDepth) SEARCH_DEPTH = self.__searchDepth;
-  currentLines = Array(NUM_LINES).fill(null);
 
   // Override fetch to serve WASM binary from memory
   const origFetch = self.fetch.bind(self);
@@ -230,38 +171,6 @@ function bootstrapStockfish() {
       }));
     }
     return origFetch(url, opts);
-  };
-
-  // Override XMLHttpRequest for sync WASM fallback
-  const OrigXHR = self.XMLHttpRequest;
-  self.XMLHttpRequest = function XHROverride() {
-    const xhr = new OrigXHR();
-    let intercepted = false;
-    const origOpen = xhr.open.bind(xhr);
-    const origSend = xhr.send.bind(xhr);
-
-    xhr.open = (method, url, ...rest) => {
-      if (typeof url === 'string' && url.indexOf('.wasm') !== -1) {
-        intercepted = true;
-      }
-      return origOpen(method, url, ...rest);
-    };
-
-    xhr.send = (...args) => {
-      if (intercepted) {
-        Object.defineProperty(xhr, 'status', { value: 200, writable: false });
-        Object.defineProperty(xhr, 'readyState', { value: 4, writable: false });
-        Object.defineProperty(xhr, 'response', { value: self.__wasmBinary, writable: false });
-        setTimeout(() => {
-          if (xhr.onreadystatechange) xhr.onreadystatechange();
-          if (xhr.onload) xhr.onload();
-        }, 0);
-        return;
-      }
-      origSend(...args);
-    };
-
-    return xhr;
   };
 
   // Override postMessage to intercept Stockfish's string UCI output
@@ -296,30 +205,25 @@ function bootstrapStockfish() {
   self.onmessage = (e) => {
     const msg = e.data;
     if (msg.type === MSG_POSITION) {
-      analyzePosition(msg.fen, msg.searchmoves);
+      analyzePosition(msg.fen);
     } else if (msg.type === MSG_STOP) {
       stopAnalysis();
     } else if (msg.type === MSG_RECONFIGURE) {
       reconfiguring = true;
-      if (analyzing) sendUCI('stop');
-      const linesChanged = msg.numLines != null && msg.numLines !== NUM_LINES;
-      if (msg.numLines != null) NUM_LINES = msg.numLines;
+      if (analyzing) sendStop();
       if (msg.searchDepth != null) SEARCH_DEPTH = msg.searchDepth;
-      currentLines = Array(NUM_LINES).fill(null);
+      currentScore = null;
       currentDepth = 0;
       analyzing = false;
       awaitingReady = false;
       pendingFen = null;
-      pendingSearchMoves = null;
       activeFen = null;
-      if (linesChanged) sendUCI(`setoption name MultiPV value ${NUM_LINES}`);
       sendUCI('isready');
     }
   };
 
   // Send initial UCI commands
   sendUCI('uci');
-  sendUCI(`setoption name MultiPV value ${NUM_LINES}`);
   sendUCI(`setoption name Hash value ${HASH_SIZE_MB}`);
   sendUCI('isready');
 }

@@ -1,15 +1,13 @@
-// Chee - Chess Eval Chart Extension
+// Chee - Chess Review Chart Extension
 // Entry point: bootstrap only — loads settings, creates modules, starts the coordinator.
 
 import createDebug, { getLogBuffer } from './lib/debug.js';
-import pollUntil from './lib/poll.js';
 import { loadSettings } from './lib/settings.js';
-import { createAdapter } from './adapters/factory.js';
+import { ChesscomAdapter } from './adapters/chesscom.js';
 import { Engine } from './core/engine.js';
 import { Panel } from './core/panel.js';
-import { BoardState } from './core/board-state.js';
-import { AnalysisCoordinator } from './core/coordinator.js';
-import { POLL_INTERVAL_MS, BOARD_TIMEOUT_MS, SETTINGS_DEFAULTS } from './constants.js';
+import { ReviewCoordinator } from './core/coordinator.js';
+import { SETTINGS_DEFAULTS } from './constants.js';
 
 const log = createDebug('chee:content');
 
@@ -20,13 +18,11 @@ const log = createDebug('chee:content');
   if (settings.debugMode) { localStorage.debug = 'chee:*'; } // eslint-disable-line no-restricted-globals
   log.info('settings:', JSON.stringify(settings));
 
-  const adapter = createAdapter();
+  const adapter = new ChesscomAdapter();
   const engine = new Engine();
   const panel = new Panel();
-  const boardState = new BoardState();
-
-  const coordinator = new AnalysisCoordinator({
-    engine, panel, adapter, settings, boardState,
+  const coordinator = new ReviewCoordinator({
+    engine, panel, adapter, settings,
   });
 
   window.addEventListener('unload', () => coordinator.destroy());
@@ -40,36 +36,18 @@ const log = createDebug('chee:content');
     if (Object.keys(update).length) coordinator.applySettings(update);
   });
 
-  log.info('init() called, searching for board...');
-  let boardEl;
-  try {
-    boardEl = await pollUntil(() => adapter.findBoard(), POLL_INTERVAL_MS, BOARD_TIMEOUT_MS);
-  } catch (err) {
-    log.error(err.message);
-    return;
-  }
-
-  coordinator.start(boardEl);
-
-  // Alt+C toggles panel visibility
-  document.addEventListener('keydown', (e) => {
-    if (e.altKey && e.code === 'KeyC' && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
-      e.preventDefault();
-      panel.toggleHidden();
-    }
-  });
+  coordinator.start();
 
   // Debug info message handler — responds to popup's diagnostic request
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type !== 'chee:debug-info') return false;
     sendResponse({
       url: window.location.href,
-      adapter: adapter.constructor.name,
       engineState: engine.state,
       engineFen: engine.currentFen,
-      boardFound: !!boardEl,
-      ply: boardState.ply,
-      turn: boardState.turn,
+      gameOver: adapter.isGameOver(),
+      moves: adapter.readMoves().length,
+      ply: adapter.detectPly(),
       logs: getLogBuffer(),
     });
     return true;

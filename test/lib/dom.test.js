@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import {
-  el, svgEl, indexOfNode, eventToSquare, SVG_NS,
+  el, svgEl, indexOfNode, SVG_NS,
 } from '../../src/lib/dom.js';
 
 describe('el', () => {
@@ -72,57 +72,5 @@ describe('indexOfNode', () => {
   it('returns -1 when target is undefined', () => {
     const nodes = [document.createElement('a')];
     expect(indexOfNode(nodes, undefined)).toBe(-1);
-  });
-});
-
-describe('eventToSquare', () => {
-  function makeBoardEl(left = 0, top = 0, width = 800) {
-    return {
-      getBoundingClientRect: () => ({
-        left, top, width, height: width, right: left + width, bottom: top + width,
-      }),
-    };
-  }
-
-  function makeEvent(clientX, clientY) {
-    return { clientX, clientY };
-  }
-
-  it('returns correct square for top-left corner (a8)', () => {
-    const board = makeBoardEl(0, 0, 800);
-    const sq = eventToSquare(makeEvent(10, 10), board, false);
-    expect(sq).toEqual({ file: 0, rank: 7 });
-  });
-
-  it('returns correct square for bottom-right corner (h1)', () => {
-    const board = makeBoardEl(0, 0, 800);
-    const sq = eventToSquare(makeEvent(790, 790), board, false);
-    expect(sq).toEqual({ file: 7, rank: 0 });
-  });
-
-  it('handles flipped board', () => {
-    const board = makeBoardEl(0, 0, 800);
-    // Top-left in flipped = h1
-    const sq = eventToSquare(makeEvent(10, 10), board, true);
-    expect(sq).toEqual({ file: 7, rank: 0 });
-  });
-
-  it('returns null for click outside board (negative)', () => {
-    const board = makeBoardEl(100, 100, 800);
-    const sq = eventToSquare(makeEvent(50, 50), board, false);
-    expect(sq).toBeNull();
-  });
-
-  it('returns null for click outside board (beyond right)', () => {
-    const board = makeBoardEl(0, 0, 800);
-    const sq = eventToSquare(makeEvent(810, 400), board, false);
-    expect(sq).toBeNull();
-  });
-
-  it('handles board with offset', () => {
-    const board = makeBoardEl(200, 100, 800);
-    // Click at the very start of the board
-    const sq = eventToSquare(makeEvent(210, 110), board, false);
-    expect(sq).toEqual({ file: 0, rank: 7 });
   });
 });

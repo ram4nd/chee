@@ -1,6 +1,6 @@
 # Chee
 
-Live chess analysis overlay powered by Stockfish WASM. A Chrome extension that reads the board from chess.com and lichess.org, runs Stockfish via WebAssembly, and plots the evaluation over the game as a chart in a panel beside the board.
+Game review for chess.com, powered by Stockfish WASM. Once your game ends, a panel above the move list shows the eval chart and your mistakes. Nothing is shown and no engine runs while the game is in progress, so it stays within fair-play rules.
 
 ## Setup
 
@@ -31,15 +31,16 @@ localStorage.debug = 'chee:*'
 
 ## Supported Sites
 
-- **chess.com** — `/game/*`, `/play/*` and `/daily/*` pages
-- **lichess.org** — all pages with a board
+- **chess.com** — `/game/*`, `/play/*` and `/daily/*` pages, after the game has ended
 
 ## Features
 
-- Eval chart: white-perspective score at each ply (clamped to ±5, mate = ±5), hover tooltip, cursor on the current ply
-- Configurable search depth (15–22)
+- Locked during live games: no eval, no engine
+- Eval chart of the whole game: hover for scores, click to jump to a move, dots on your mistakes
+- Your inaccuracies (?!), mistakes (?) and blunders (??) listed and marked in the move list
+- Click a mistake to see the position before it and look for the better move; "Best move?" reveals the engine's choice
+- Configurable search depth (12–20)
 - Catppuccin theme system (Latte, Frappé, Macchiato, Mocha) + site-matching mode
-- Draggable, resizable panel with hide/minimize controls (Alt+C toggles visibility)
 - Copy debug info from the popup for troubleshooting
 
 ## License

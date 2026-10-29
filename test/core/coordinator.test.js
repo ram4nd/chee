@@ -1,262 +1,165 @@
 import {
   describe, it, expect, vi, beforeEach,
 } from 'vitest';
-import { AnalysisCoordinator } from '../../src/core/coordinator.js';
+import { ReviewCoordinator } from '../../src/core/coordinator.js';
+import { buildPositions } from '../../src/core/review.js';
 import {
-  TURN_WHITE,
+  TURN_WHITE, TURN_BLACK, EVT_EVAL, SEVERITY_BLUNDER,
 } from '../../src/constants.js';
 
-// Mock globals needed by coordinator dependencies
 beforeEach(() => {
   vi.stubGlobal('localStorage', {
     getItem: vi.fn(() => ''),
     setItem: vi.fn(),
     removeItem: vi.fn(),
   });
-  vi.stubGlobal('window', {
-    addEventListener: vi.fn(),
-    location: { hostname: 'chess.com' },
-  });
-  vi.stubGlobal('document', {
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-  });
+  vi.stubGlobal('window', { location: { hostname: 'www.chess.com' } });
 });
 
 function makeEngine() {
+  const handlers = {};
   return {
+    handlers,
     init: vi.fn(),
     analyze: vi.fn(),
     stop: vi.fn(),
     reconfigure: vi.fn(),
     destroy: vi.fn(),
-    on: vi.fn(),
-    currentFen: null,
+    on: vi.fn((evt, fn) => { handlers[evt] = fn; }),
   };
 }
 
 function makePanel() {
   return {
-    mount: vi.fn(),
-    el: { querySelector: vi.fn(), style: { setProperty: vi.fn() } },
+    mounted: false,
+    mount: vi.fn(function mount() { this.mounted = true; }),
+    isMounted: vi.fn(function isMounted() { return this.mounted; }),
+    el: { style: { setProperty: vi.fn() }, contains: vi.fn(() => false) },
     restoreState: vi.fn(),
-    setTurn: vi.fn(),
-    recordScore: vi.fn(),
+    showLocked: vi.fn(),
+    showProgress: vi.fn(),
+    showMistakes: vi.fn(),
+    render: vi.fn(),
     destroy: vi.fn(),
   };
 }
 
-function makeAdapter() {
+function makeAdapter(moves, { over = true, color = TURN_WHITE } = {}) {
   return {
-    findBoard: vi.fn(),
-    readPieces: vi.fn(() => []),
-    isFlipped: vi.fn(() => false),
-    detectTurn: vi.fn(() => TURN_WHITE),
-    detectCastling: vi.fn(() => 'KQkq'),
-    detectEnPassant: vi.fn(() => '-'),
-    detectMoveCount: vi.fn(() => 1),
+    moves,
+    over,
+    readMoves: vi.fn(function readMoves() { return this.moves; }),
+    isGameOver: vi.fn(function isGameOver() { return this.over; }),
+    playerColor: vi.fn(() => color),
     detectPly: vi.fn(() => 0),
-    detectLastMove: vi.fn(() => null),
-    getPanelAnchor: vi.fn(() => ({})),
+    getMountPoint: vi.fn(() => ({})),
+    jumpToPly: vi.fn(),
+    markMoves: vi.fn(),
     observe: vi.fn(),
     disconnect: vi.fn(),
-    exploreBoardArea: vi.fn(),
-    findAlternatePieceContainer: vi.fn(() => null),
   };
 }
 
-function makeBoardState() {
-  return {
-    board: null,
-    ply: 0,
-    fen: null,
-    turn: null,
-    boardEl: null,
-    isValid: false,
-    setBoardEl: vi.fn(function setBoardEl(el) { this.boardEl = el; }),
-    update: vi.fn(function update(board, ply, fen, turn) {
-      this.board = board;
-      this.ply = ply;
-      this.fen = fen;
-      this.turn = turn;
-    }),
-    boardEquals: vi.fn(() => false),
-    detectTurnFromDiff: vi.fn(() => null),
-  };
-}
-
-function createCoordinator(overrides = {}) {
+function setup(moves, opts) {
   const engine = makeEngine();
   const panel = makePanel();
-  const adapter = makeAdapter();
-  const boardState = makeBoardState();
-  const settings = {
-    searchDepth: 22,
-    theme: 'site',
-    panelMinimized: false,
-    panelHidden: false,
-    panelLeft: null,
-    panelTop: null,
-    panelWidth: null,
-    ...overrides,
-  };
-
-  const coordinator = new AnalysisCoordinator({
-    engine, panel, adapter, settings, boardState,
+  const adapter = makeAdapter(moves, opts);
+  const coordinator = new ReviewCoordinator({
+    engine, panel, adapter, settings: { searchDepth: 15, theme: 'site' },
   });
-
   return {
-    coordinator, engine, panel, adapter, boardState, settings,
+    engine, panel, adapter, coordinator,
   };
 }
 
-describe('AnalysisCoordinator', () => {
-  const evalData = {
-    depth: 22,
-    complete: true,
-    lines: [{ score: 30, mate: null, pv: ['e2e4'] }],
-  };
+// Engine reply for the position currently being analysed (score from side to move)
+function reply(engine, data) {
+  const fen = engine.analyze.mock.calls.at(-1)[0];
+  engine.handlers[EVT_EVAL]({
+    fen, depth: 15, mate: null, bestmove: null, ...data,
+  });
+}
 
-  function makeBoardEl() {
-    return {
-      tagName: 'DIV',
-      id: 'board',
-      className: 'board',
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    };
-  }
-
-  describe('applySettings', () => {
-    it('applies theme to panel', () => {
-      const { coordinator, panel } = createCoordinator();
-      coordinator.applySettings({ theme: 'mocha' });
-      expect(panel.el.style.setProperty).toHaveBeenCalled();
-    });
-
-    it('reconfigures engine with a single line when searchDepth changes', () => {
-      const { coordinator, engine } = createCoordinator();
-      coordinator.applySettings({ searchDepth: 18 });
-      expect(engine.reconfigure).toHaveBeenCalledWith(expect.objectContaining({ searchDepth: 18, numLines: 1 }));
-    });
-
-    it('does not reconfigure engine for unrelated settings', () => {
-      const { coordinator, engine } = createCoordinator();
-      coordinator.applySettings({ theme: 'mocha' });
-      expect(engine.reconfigure).not.toHaveBeenCalled();
-    });
-
-    it('handles debugMode setting', () => {
-      const { coordinator } = createCoordinator();
-      coordinator.applySettings({ debugMode: true });
-      expect(localStorage.debug).toBe('chee:*');
-
-      coordinator.applySettings({ debugMode: false });
-      expect(localStorage.removeItem).toHaveBeenCalledWith('debug');
-    });
-
-    it('records cached score instead of reconfiguring on cache hit', () => {
-      const { coordinator, engine, panel } = createCoordinator();
-      coordinator._activeFen = 'testfen';
-      coordinator._evalCache.set('testfen|18', evalData);
-
-      coordinator.applySettings({ searchDepth: 18 });
-
-      expect(panel.recordScore).toHaveBeenCalledWith(0, evalData);
-      expect(engine.reconfigure).not.toHaveBeenCalled();
-    });
-
-    it('re-analyzes after reconfigure when activeFen exists', () => {
-      const { coordinator, engine } = createCoordinator();
-      coordinator._activeFen = 'testfen';
-      coordinator.applySettings({ searchDepth: 18 });
-      expect(engine.analyze).toHaveBeenCalledWith('testfen');
-    });
+describe('ReviewCoordinator', () => {
+  it('shows nothing and never starts the engine during a live game', () => {
+    const { engine, panel, coordinator } = setup(['e4', 'e5'], { over: false });
+    coordinator.sync();
+    expect(panel.showLocked).toHaveBeenCalled();
+    expect(engine.init).not.toHaveBeenCalled();
+    expect(engine.analyze).not.toHaveBeenCalled();
   });
 
-  describe('_onEvalData', () => {
-    it('records score for the active position', () => {
-      const { coordinator, engine, panel } = createCoordinator();
-      coordinator._activeFen = 'testfen';
-      engine.currentFen = 'testfen';
-
-      coordinator._onEvalData(evalData);
-
-      expect(panel.recordScore).toHaveBeenCalledWith(0, evalData);
-      expect(coordinator._cacheLookup('testfen')).toBe(evalData);
-    });
-
-    it('ignores evals for a stale position', () => {
-      const { coordinator, engine, panel } = createCoordinator();
-      coordinator._activeFen = 'newfen';
-      engine.currentFen = 'oldfen';
-
-      coordinator._onEvalData(evalData);
-
-      expect(panel.recordScore).not.toHaveBeenCalled();
-    });
+  it('waits for the move list before mounting', () => {
+    const { adapter, panel, coordinator } = setup([]);
+    adapter.getMountPoint.mockReturnValue(null);
+    coordinator.sync();
+    expect(panel.mount).not.toHaveBeenCalled();
   });
 
-  describe('destroy', () => {
-    it('cleans up everything', () => {
-      const {
-        coordinator, engine, panel, adapter,
-      } = createCoordinator();
-      coordinator.destroy();
-
-      expect(adapter.disconnect).toHaveBeenCalled();
-      expect(engine.destroy).toHaveBeenCalled();
-      expect(panel.destroy).toHaveBeenCalled();
-    });
+  it('analyses every position in order once the game is over', () => {
+    const { engine, coordinator } = setup(['e4', 'e5']);
+    coordinator.sync();
+    expect(engine.init).toHaveBeenCalledTimes(1);
+    const fens = buildPositions(['e4', 'e5']).map((p) => p.fen);
+    expect(engine.analyze).toHaveBeenLastCalledWith(fens[0]);
+    reply(engine, { score: 30, bestmove: 'e2e4' });
+    expect(engine.analyze).toHaveBeenLastCalledWith(fens[1]);
+    reply(engine, { score: -30, bestmove: 'e7e5' });
+    expect(engine.analyze).toHaveBeenLastCalledWith(fens[2]);
   });
 
-  describe('_cacheKey', () => {
-    it('formats as fen|depth', () => {
-      const { coordinator } = createCoordinator();
-      expect(coordinator._cacheKey('testfen', 22)).toBe('testfen|22');
-    });
+  it('ignores results for other positions', () => {
+    const { engine, coordinator } = setup(['e4']);
+    coordinator.sync();
+    reply(engine, { score: 30, fen: 'other' });
+    expect(engine.analyze).toHaveBeenCalledTimes(1);
   });
 
-  describe('_cacheLookup', () => {
-    it('returns null when cache is empty', () => {
-      const { coordinator } = createCoordinator();
-      expect(coordinator._cacheLookup('testfen')).toBeNull();
-    });
+  it('reports only the player\'s mistakes when analysis finishes', () => {
+    const {
+      engine, panel, adapter, coordinator,
+    } = setup(['e4', 'f6', 'd4', 'g5', 'Qh5#'], { color: TURN_BLACK });
+    coordinator.sync();
+    reply(engine, { score: 30, bestmove: 'e2e4' }); // start, white to move
+    reply(engine, { score: -30, bestmove: 'e7e5' }); // after e4
+    reply(engine, { score: 90, bestmove: 'd2d4' }); // after f6
+    reply(engine, { score: -100, bestmove: 'e7e6' }); // after d4
+    reply(engine, { score: null, mate: 1, bestmove: 'd1h5' }); // after g5: white mates
+    expect(engine.analyze).toHaveBeenCalledTimes(5); // the mate position needs no engine
+
+    const mistakes = panel.showMistakes.mock.calls.at(-1)[0];
+    expect(mistakes.map((m) => [m.ply, m.san, m.severity, m.best])).toEqual([
+      [4, 'g5', SEVERITY_BLUNDER, 'e6'],
+    ]);
+    expect(adapter.markMoves).toHaveBeenLastCalledWith(new Map([[4, '??']]));
   });
 
-  describe('start', () => {
-    it('mounts panel, initializes engine with a single line, and starts observing', () => {
-      const {
-        coordinator, engine, panel, adapter, boardState,
-      } = createCoordinator();
+  it('does not re-analyse when the moves are unchanged', () => {
+    const { engine, coordinator } = setup(['e4']);
+    coordinator.sync();
+    reply(engine, { score: 30, bestmove: 'e2e4' });
+    reply(engine, { score: -30, bestmove: 'e7e5' });
+    coordinator.sync();
+    expect(engine.analyze).toHaveBeenCalledTimes(2);
+  });
 
-      adapter.readPieces.mockReturnValue([
-        { file: 4, rank: 1, piece: 'P' },
-        { file: 4, rank: 6, piece: 'p' },
-        { file: 4, rank: 0, piece: 'K' },
-        { file: 4, rank: 7, piece: 'k' },
-      ]);
+  it('locks again and clears marks when a new game starts', () => {
+    const {
+      engine, panel, adapter, coordinator,
+    } = setup(['e4']);
+    coordinator.sync();
+    adapter.over = false;
+    adapter.moves = [];
+    coordinator.sync();
+    expect(engine.stop).toHaveBeenCalled();
+    expect(panel.showLocked).toHaveBeenCalled();
+    expect(adapter.markMoves).toHaveBeenLastCalledWith(new Map());
+  });
 
-      const boardEl = makeBoardEl();
-      coordinator.start(boardEl);
-
-      expect(boardState.setBoardEl).toHaveBeenCalledWith(boardEl);
-      expect(panel.mount).toHaveBeenCalled();
-      expect(panel.setTurn).toHaveBeenCalledWith(TURN_WHITE);
-      expect(engine.init).toHaveBeenCalledWith(expect.objectContaining({ numLines: 1 }));
-      expect(engine.analyze).toHaveBeenCalled();
-      expect(adapter.observe).toHaveBeenCalled();
-      coordinator.destroy();
-    });
-
-    it('polls for pieces when readPieces returns empty', () => {
-      const { coordinator, adapter } = createCoordinator();
-      adapter.readPieces.mockReturnValue([]);
-
-      coordinator.start(makeBoardEl());
-
-      expect(adapter.exploreBoardArea).toHaveBeenCalled();
-      coordinator.destroy();
-    });
+  it('jumps the board when the panel asks to seek', () => {
+    const { panel, adapter, coordinator } = setup(['e4']);
+    coordinator.sync();
+    panel.onSeek(1);
+    expect(adapter.jumpToPly).toHaveBeenCalledWith(1);
   });
 });

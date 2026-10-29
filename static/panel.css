@@ -1,15 +1,19 @@
+:root {
+  --chee-blunder: #ca3431;
+  --chee-mistake: #e58f2a;
+  --chee-inaccuracy: #f7c631;
+}
+
 #chee-analysis-panel {
-  position: fixed;
-  width: 220px;
+  margin: 0 0 8px;
   background: var(--chee-base);
   border: 1px solid var(--chee-surface0);
-  border-radius: 4px;
+  border-radius: 6px;
   color: var(--chee-text);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 14px;
-  z-index: 100000;
+  font-size: 13px;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
 }
 
 #chee-analysis-panel * {
@@ -18,81 +22,31 @@
 
 /* Header */
 #chee-analysis-panel .chee-header {
-  background: var(--chee-mantle);
-  border-bottom: 1px solid var(--chee-surface0);
-  padding: 6px 10px;
-  cursor: grab;
-}
-
-#chee-analysis-panel.chee-dragging .chee-header {
-  cursor: grabbing;
-}
-
-body.chee-dragging {
-  user-select: none;
-  cursor: grabbing !important;
-}
-
-#chee-analysis-panel .chee-header-top {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--chee-mantle);
 }
 
 #chee-analysis-panel .chee-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--chee-subtext0);
+  white-space: nowrap;
+}
+
+#chee-analysis-panel .chee-status {
   flex: 1;
-  text-align: center;
+  text-align: right;
   font-size: 12px;
   font-weight: 600;
-  color: var(--chee-subtext0);
-}
-
-/* Eval chart */
-#chee-analysis-panel .chee-chart {
-  position: relative;
-  height: 60px;
+  color: var(--chee-text);
   overflow: hidden;
-}
-
-#chee-analysis-panel .chee-chart-tooltip {
-  display: none;
-  position: absolute;
-  top: 2px;
-  transform: translateX(-50%);
-  background: var(--chee-surface0, #313244);
-  color: var(--chee-text, #cdd6f4);
-  font-size: 10px;
-  font-weight: 600;
-  padding: 1px 4px;
-  border-radius: 3px;
+  text-overflow: ellipsis;
   white-space: nowrap;
-  pointer-events: none;
-  z-index: 1;
 }
 
-#chee-analysis-panel .chee-chart svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-#chee-analysis-panel .chee-chart .chee-chart-white {
-  fill: #e8e8e8;
-}
-
-#chee-analysis-panel .chee-chart .chee-chart-zero {
-  stroke: #666;
-  stroke-width: 0.5;
-}
-
-#chee-analysis-panel .chee-chart .chee-chart-cursor {
-  stroke: var(--chee-peach, #fab387);
-  stroke-width: 1.5;
-  opacity: 0.8;
-}
-
-/* Hide / Toggle buttons */
-#chee-analysis-panel .chee-hide,
 #chee-analysis-panel .chee-toggle {
   cursor: pointer;
   color: var(--chee-overlay0);
@@ -106,81 +60,174 @@ body.chee-dragging {
   background: none;
 }
 
-#chee-analysis-panel .chee-hide:hover,
 #chee-analysis-panel .chee-toggle:hover {
   color: var(--chee-text);
 }
 
-/* Minimized state — hide chart, keep header */
-#chee-analysis-panel.chee-minimized .chee-chart {
+#chee-analysis-panel.chee-minimized .chee-body,
+#chee-analysis-panel.chee-locked .chee-body {
   display: none;
 }
 
-/* Hidden state */
-#chee-analysis-panel.chee-hidden {
-  display: none;
+#chee-analysis-panel.chee-locked .chee-status {
+  color: var(--chee-overlay0);
+  font-weight: 400;
 }
 
-/* Show button — hidden by default, appears at hide button's position */
-#chee-show-btn {
-  display: none;
-  width: 20px;
-  height: 20px;
-  border-radius: 3px;
-  border: 1px solid var(--chee-surface0, #404040);
-  background: var(--chee-mantle, #1a1714);
-  color: var(--chee-subtext1, #b9b9b9);
-  font-size: 14px;
-  line-height: 1;
+/* Review ready: brief highlight so the result is noticed */
+#chee-analysis-panel.chee-announce {
+  animation: chee-announce 0.8s ease-in-out 3;
+}
+
+@keyframes chee-announce {
+  50% { box-shadow: 0 0 0 3px var(--chee-mistake); }
+}
+
+/* Eval chart */
+#chee-analysis-panel .chee-chart {
+  position: relative;
+  height: 72px;
   cursor: pointer;
-  z-index: 100001;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  padding: 0;
-  align-items: center;
-  justify-content: center;
 }
 
-#chee-show-btn:hover {
-  color: var(--chee-text, #ccc);
+#chee-analysis-panel .chee-chart svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
-#chee-show-btn.chee-visible {
-  display: inline-flex;
+#chee-analysis-panel .chee-chart-bg {
+  fill: #2a2a2a;
 }
 
-/* Resize handle — bottom-right grip */
-#chee-analysis-panel .chee-resize {
+#chee-analysis-panel .chee-chart-white {
+  fill: #e8e8e8;
+}
+
+#chee-analysis-panel .chee-chart-zero {
+  stroke: #777;
+  stroke-width: 0.5;
+}
+
+#chee-analysis-panel .chee-chart-cursor {
   position: absolute;
+  top: 0;
   bottom: 0;
-  right: 0;
-  width: 14px;
-  height: 14px;
-  cursor: nwse-resize;
-  background:
-    linear-gradient(
-      135deg,
-      transparent 30%,
-      var(--chee-overlay0, #6c7086) 30%,
-      var(--chee-overlay0, #6c7086) 35%,
-      transparent 35%,
-      transparent 55%,
-      var(--chee-overlay0, #6c7086) 55%,
-      var(--chee-overlay0, #6c7086) 60%,
-      transparent 60%,
-      transparent 80%,
-      var(--chee-overlay0, #6c7086) 80%,
-      var(--chee-overlay0, #6c7086) 85%,
-      transparent 85%
-    );
-  opacity: 0.6;
-  border-radius: 0 0 4px 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--chee-peach, #fab387);
+  opacity: 0.85;
+  pointer-events: none;
 }
 
-#chee-analysis-panel .chee-resize:hover {
-  opacity: 1;
+#chee-analysis-panel .chee-chart-markers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
-body.chee-resizing {
-  user-select: none;
-  cursor: nwse-resize !important;
+#chee-analysis-panel .chee-chart-marker {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  border: 1px solid #fff;
 }
+
+#chee-analysis-panel .chee-chart-tooltip {
+  display: none;
+  position: absolute;
+  top: 2px;
+  transform: translateX(-50%);
+  background: var(--chee-surface0);
+  color: var(--chee-text);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Mistake list */
+#chee-analysis-panel .chee-mistakes {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  max-height: 168px;
+  overflow-y: auto;
+}
+
+#chee-analysis-panel .chee-mistakes:empty {
+  display: none;
+}
+
+#chee-analysis-panel .chee-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+#chee-analysis-panel .chee-item:hover {
+  background: var(--chee-surface0);
+}
+
+#chee-analysis-panel .chee-glyph {
+  min-width: 24px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  color: #fff;
+  font-weight: 700;
+  text-align: center;
+}
+
+#chee-analysis-panel .chee-move {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+#chee-analysis-panel .chee-swing {
+  flex: 1;
+  color: var(--chee-subtext0);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+#chee-analysis-panel .chee-best {
+  cursor: pointer;
+  padding: 2px 6px;
+  border: 1px solid var(--chee-surface1);
+  border-radius: 3px;
+  background: none;
+  color: var(--chee-subtext0);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+#chee-analysis-panel .chee-best:disabled {
+  cursor: default;
+  color: var(--chee-text);
+  font-weight: 600;
+}
+
+#chee-analysis-panel .chee-blunder .chee-glyph,
+#chee-analysis-panel .chee-chart-marker.chee-blunder { background: var(--chee-blunder); }
+#chee-analysis-panel .chee-mistake .chee-glyph,
+#chee-analysis-panel .chee-chart-marker.chee-mistake { background: var(--chee-mistake); }
+#chee-analysis-panel .chee-inaccuracy .chee-glyph,
+#chee-analysis-panel .chee-chart-marker.chee-inaccuracy { background: var(--chee-inaccuracy); }
+
+/* Glyphs next to the player's mistakes in chess.com's move list */
+wc-simple-move-list .node[data-chee-glyph]::after {
+  content: attr(data-chee-glyph);
+  margin-left: 2px;
+  font-weight: 700;
+}
+
+wc-simple-move-list .node[data-chee-glyph="??"]::after { color: var(--chee-blunder); }
+wc-simple-move-list .node[data-chee-glyph="?"]::after { color: var(--chee-mistake); }
+wc-simple-move-list .node[data-chee-glyph="?!"]::after { color: var(--chee-inaccuracy); }

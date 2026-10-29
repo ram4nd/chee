@@ -24,23 +24,6 @@ describe('themes', () => {
     return import('../../src/lib/themes.js');
   }
 
-  describe('resolveSiteTheme', () => {
-    it('returns "chesscom" for chess.com hostname', async () => {
-      const { resolveSiteTheme } = await load('www.chess.com');
-      expect(resolveSiteTheme()).toBe('chesscom');
-    });
-
-    it('returns "lichess" for lichess.org hostname', async () => {
-      const { resolveSiteTheme } = await load('lichess.org');
-      expect(resolveSiteTheme()).toBe('lichess');
-    });
-
-    it('returns "chesscom" as default for unknown hostname', async () => {
-      const { resolveSiteTheme } = await load('example.com');
-      expect(resolveSiteTheme()).toBe('chesscom');
-    });
-  });
-
   describe('applyTheme', () => {
     it('sets CSS custom properties on element for a named theme', async () => {
       const { applyTheme } = await load();
@@ -54,14 +37,14 @@ describe('themes', () => {
       expect(props['--chee-text']).toBe('#cdd6f4');
     });
 
-    it('resolves "site" theme using resolveSiteTheme', async () => {
-      const { applyTheme } = await load('lichess.org');
+    it('resolves "site" to the chess.com colours', async () => {
+      const { applyTheme } = await load();
       const props = {};
       const el = { style: { setProperty: vi.fn((k, v) => { props[k] = v; }) } };
 
       applyTheme(el, 'site');
 
-      expect(props['--chee-base']).toBe('#241f1a'); // lichess base color
+      expect(props['--chee-base']).toBe('#302e2b');
     });
 
     it('falls back to chesscom for unknown theme name', async () => {

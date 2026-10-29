@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Chee is a Chrome extension (Manifest v3) that provides real-time Stockfish analysis on chess.com and lichess.org. It reads the board DOM, generates a FEN, runs Stockfish via WebAssembly in a Web Worker, and renders an eval chart panel beside the board.
+Chee is a Chrome extension (Manifest v3) for chess.com game review. Once a game has ended it replays the move list with chess.js, runs Stockfish via WebAssembly in a Web Worker on every position, and shows an eval chart plus the player's mistakes in a panel above the move list. During a live game it shows nothing and does not load the engine, so it is never engine assistance.
 
 ## Commands
 
@@ -67,35 +67,29 @@ Line endings are enforced as LF on all platforms via `.gitattributes`.
 ## Architecture
 
 **Two entry points** bundled by Rollup:
-- `src/content.js` — injected into chess pages, orchestrates board reading → FEN → engine → chart panel.
+- `src/content.js` — injected into chess.com game pages, starts the review coordinator.
 - `src/popup.js` — extension popup: theme, search depth, debug toggle, copy debug info. Checkboxes auto-wired via `data-key` attributes to `chrome.storage`.
 
-**Adapter pattern** for multi-site support:
-- `adapters/base.js` — abstract `BoardAdapter` interface (findBoard, readPieces, detectTurn, etc.)
-- `adapters/chesscom.js` — chess.com: piece classes like `wp`, `br`; square classes like `square-45`
-- `adapters/lichess.js` — lichess: chessground DOM, `piece` elements with `translate()` transforms, turn detection via move list (`l4x kwdb` elements)
-- `adapters/factory.js` — hostname-based auto-detection, returns the right adapter
+**Site adapter:**
+- `adapters/chesscom.js` — reads SAN moves from `wc-simple-move-list` (piece icons via `data-figurine`), game over (the `.game-result` row), player colour (board `.flipped`), selected ply, clicks moves to jump, marks moves with `data-chee-glyph`, observes `document.body`.
 
 **Core modules:**
-- `core/engine.js` — Stockfish worker lifecycle (state machine: IDLE→INITIALIZING→READY→ANALYZING), UCI protocol, auto-recovery with max 2 retry attempts per crashing position. Runs with MultiPV 1 (`NUM_LINES`).
-- `core/panel.js` — panel DOM (header with hide/minimize, eval chart, resize handle), drag/resize/position tracking
-- `core/renderers/chart-renderer.js` — SVG eval chart
-- `core/renderers/header-renderer.js` — panel header (drag handle + controls)
-- `core/coordinator.js` — mediates between engine, panel, and adapter; eval LRU cache keyed by `fen|depth`; highlight-based turn detection fallback.
-- `core/board-state.js` — value object: board array, ply, FEN, turn; diff-based turn detection
-- `core/fen.js` — FEN generation
+- `core/review.js` — pure logic: `buildPositions()` (chess.js replay, checkmate/stalemate scored without the engine), `whiteCp()`, `winChance()` (lichess curve), `findMistakes()` (inaccuracy/mistake/blunder by drop in winning chances, see `SEVERITY_THRESHOLDS`), `uciToSan()`.
+- `core/coordinator.js` — `ReviewCoordinator`: locks the panel while the game is live; after it ends, analyses each position in turn (one at a time), caches results in an LRU keyed by `fen|depth`, then reports the player's mistakes.
+- `core/engine.js` — Stockfish worker lifecycle (state machine: IDLE→INITIALIZING→READY→ANALYZING), worker posts one `{fen, depth, score, mate, bestmove}` per finished search (interrupted searches are not reported); auto-recovery with max 2 retry attempts per crashing position.
+- `core/panel.js` — panel inserted before the sidebar's move list scroll area: header (status, minimize), eval chart, mistake list. Clicking a mistake jumps to the position before it; "Best move?" reveals the engine move.
+- `core/renderers/chart-renderer.js` — SVG eval chart with HTML cursor and mistake markers; click to jump to a ply.
 
 **Shared utilities** (`lib/`):
 - `lib/dom.js` — DOM helpers: `el()`, `svgEl()`, `indexOfNode()`
 - `lib/emitter.js` — simple event emitter mixin
 - `lib/debug.js` — `createDebug('chee:namespace')` wrapper. Always-on ring buffer (`getLogBuffer()`) stores last 200 log entries regardless of debug mode. `refreshDebugFlag()` re-parses `localStorage.debug` for same-tab updates.
-- `lib/format.js` — shared eval formatters: `advantageCls()`, `formatMate()`, `formatCp()`
+- `lib/format.js` — `formatCp()`, `formatScore()`
 - `lib/lru.js` — LRU cache for eval results
 - `lib/themes.js` — Catppuccin theme application
 - `lib/settings.js` — Chrome storage load/save
-- `lib/poll.js` — `pollUntil()` async polling helper
 
-**Flow:** MutationObserver detects board change → 100ms debounce → adapter reads pieces + turn → FEN built → engine analyzes → chart records the score at the current ply.
+**Flow:** MutationObserver on the page → 100ms debounce → if no result row: lock (engine stopped, marks cleared) → else read moves → positions → analyse missing ones → chart fills in → mistakes listed, chart markers and move-list glyphs added.
 
 ## Key Conventions
 
@@ -119,28 +113,16 @@ Line endings are enforced as LF on all platforms via `.gitattributes`.
 
 ## Common Pitfalls & Fixes
 
-### DOM-based detection is fragile — prefer board diff
+### Never show analysis during a live game
 
-Chess sites update DOM elements (clocks, move lists, highlights) at unpredictable times relative to piece positions. This causes:
+The only unlock signal is chess.com's result row (`wc-simple-move-list .game-result`). Fail closed: no move list or no result means locked, and the engine is not even initialised until the first finished game.
 
-- **Turn detection wrong**: `detectTurn()` reads clock/move-list DOM, but these may not have updated when the MutationObserver fires on piece movement. Fix: `detectTurnFromDiff()` in `core/board-state.js` compares previous board array to current — if a white piece arrived, it's black's turn. Falls back to highlight-based detection (check piece color at the `to` square of the last move highlight), then to adapter `detectTurn()` for initial position or large jumps (>4 squares changed).
-- **Move count wrong**: Adapter counts all moves in the DOM move list, but during game review the user may be at an earlier position. Fix: find the selected/active move node first, count up to that index. Selector varies by site (chess.com: `.node-highlight-content.selected`; lichess: `kwdb.a1t` / `.tview2 move.active`).
+### chess.com DOM structure (as of 2026)
 
-**Rule of thumb for new adapters**: implement `readPieces()`, `isFlipped()`, and `detectPly()` accurately. Turn detection is handled by `BoardState.detectTurnFromDiff()` — adapter-level `detectTurn()` is only a fallback. `detectPly()` sets the chart's x position for each score.
-
-### chess.com DOM structure (as of 2025)
-
-- Move list: `wc-simple-move-list` → `.main-line-row` → `.node.white-move` / `.node.black-move` → `span.node-highlight-content` (`.selected` on active move)
-- Clocks: `.clock-component.clock-white` / `.clock-component.clock-black`, active has `.clock-player-turn`
-- Highlights: `.highlight.square-XY` (XY = file+rank, 1-indexed)
-- Pieces: `.piece` with two-char color+type class (`wp`, `br`) and `square-XY` class
-
-### lichess DOM structure (as of 2025)
-
-- Move list: `l4x kwdb` elements (`.a1t` = active) or `.tview2 move` (`.active` = active)
-- Board: `cg-board` inside `.cg-wrap` (`.orientation-black` when flipped)
-- Pieces: `piece` elements with color class (`white`/`black`) + type class (`king`, `pawn`, etc.), positioned via `translate(Xpx, Ypx)`
-- Highlights: `square.last-move` positioned via `translate()`
+- Move list: `wc-simple-move-list` → `.main-line-row` → `.node.white-move` / `.node.black-move` → `span.node-highlight-content` (`.selected` on active move). Piece letters are icons: `<span data-figurine="N">`.
+- Result: `.main-line-row.result-row > .game-result` (`1-0`, `0-1`, `½-½`) once the game ends
+- Sidebar scroll area wrapping the move list: `.play-controller-scrollable` (play pages), `.game-tab-scrollable` (finished game pages)
+- Board: `wc-chess-board`, `.flipped` when the player is black
 
 ### Debug logging
 
@@ -150,8 +132,8 @@ Chess sites update DOM elements (clocks, move lists, highlights) at unpredictabl
 
 ## Eval Chart
 
-SVG area chart plotting white-perspective eval at each ply. White area fills from bottom up to the score line (more white = white winning). Dark background = black's territory. Orange cursor line marks current ply. Scores clamped to ±500cp, mate = ±500. Updates live as engine depth increases, persists through navigation. Hover shows a tooltip with move number and score.
+SVG area chart plotting white-perspective eval at each ply. White area fills from bottom up to the score line (more white = white winning). Dark background = black's territory. Orange cursor line marks current ply. Scores clamped to ±500cp on the chart, mate = ±500. Fills in as positions are analysed. Hover shows move number and score; click jumps the board to that ply. Coloured dots mark the player's mistakes.
 
 ## Theme System
 
-Catppuccin color palette (Latte, Frappé, Macchiato, Mocha) plus a "Match Site" option. Applied via CSS custom properties (`--chee-base`, `--chee-text`, etc.) on the panel element.
+Catppuccin color palette (Latte, Frappé, Macchiato, Mocha) plus a "Match Site" option (chess.com colours). Applied via CSS custom properties (`--chee-base`, `--chee-text`, etc.) on the panel element.

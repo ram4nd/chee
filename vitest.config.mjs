@@ -11,7 +11,6 @@ export default defineConfig({
         'src/popup.js',
         'src/core/renderers/**',
         'src/core/panel.js',
-        'src/core/arrow.js',
         'src/adapters/**',
       ],
     },

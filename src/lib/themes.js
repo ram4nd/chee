@@ -13,20 +13,6 @@ const THEMES = {
     green: '#81b64c',
     peach: '#e8833a',
   },
-  lichess: {
-    base: '#241f1a',
-    mantle: '#1a1714',
-    crust: '#14110a',
-    surface0: '#404040',
-    surface1: '#382f28',
-    overlay0: '#6b6b6b',
-    overlay1: '#838383',
-    subtext0: '#949494',
-    subtext1: '#b9b9b9',
-    text: '#cccccc',
-    green: '#5a9e3e',
-    peach: '#d97706',
-  },
   latte: {
     base: '#eff1f5',
     mantle: '#e6e9ef',
@@ -85,21 +71,8 @@ const THEMES = {
   },
 };
 
-const SITE_THEMES = [
-  { match: 'chess.com', theme: 'chesscom' },
-  { match: 'lichess.org', theme: 'lichess' },
-];
-
-export function resolveSiteTheme() {
-  const host = window.location.hostname;
-  for (const { match, theme } of SITE_THEMES) {
-    if (host.includes(match)) return theme;
-  }
-  return 'chesscom';
-}
-
 export function applyTheme(el, name) {
-  const resolved = name === 'site' ? resolveSiteTheme() : name;
+  const resolved = name === 'site' ? 'chesscom' : name;
   const palette = THEMES[resolved] || THEMES.chesscom;
   for (const [key, value] of Object.entries(palette)) {
     el.style.setProperty(`--chee-${key}`, value);

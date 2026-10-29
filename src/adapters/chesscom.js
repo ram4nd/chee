@@ -1,379 +1,99 @@
-// chess.com adapter: selectors, piece parsing, turn/EP detection
+// chess.com adapter: reads the move list, game state and board orientation
 
-import {
-  find, forEach, includes, filter, map, take, reduce, compact,
-} from 'lodash-es';
-import createDebug from '../lib/debug.js';
-import { BoardAdapter, detectEnPassantFromSquares } from './base.js';
+import { forEach } from 'lodash-es';
 import { indexOfNode } from '../lib/dom.js';
-import {
-  BOARD_SIZE, TURN_WHITE, TURN_BLACK, FEN_NONE,
-  WHITE_KING, WHITE_QUEEN, WHITE_ROOK, WHITE_BISHOP, WHITE_KNIGHT, WHITE_PAWN,
-  BLACK_KING, BLACK_QUEEN, BLACK_ROOK, BLACK_BISHOP, BLACK_KNIGHT, BLACK_PAWN,
-  SQUARE_PREFIX, SQUARE_CLASS_MIN_LEN,
-  MAX_EXPLORE_CHILDREN, MAX_EXPLORE_DEPTH, MAX_EXPLORE_DEPTH_LAYOUT,
-  MAX_LOG_SAMPLES, MAX_ATTR_DISPLAY_LEN, MAX_CLASS_DISPLAY_LEN,
-  MIN_PIECE_CONTAINER_COUNT,
-} from '../constants.js';
+import { TURN_WHITE, TURN_BLACK } from '../constants.js';
 
-const log = createDebug('chee:chesscom');
-
-const PIECE_MAP = {
-  wp: WHITE_PAWN,
-  wn: WHITE_KNIGHT,
-  wb: WHITE_BISHOP,
-  wr: WHITE_ROOK,
-  wq: WHITE_QUEEN,
-  wk: WHITE_KING,
-  bp: BLACK_PAWN,
-  bn: BLACK_KNIGHT,
-  bb: BLACK_BISHOP,
-  br: BLACK_ROOK,
-  bq: BLACK_QUEEN,
-  bk: BLACK_KING,
-};
-
-const BOARD_SELECTORS = [
-  'wc-chess-board#board-single',
-  'wc-chess-board',
-  'chess-board',
-  '#board-single',
-];
-
-const SEL_PIECE = '.piece';
-const SEL_PIECE_ATTR = '[class*="piece"]';
-const SEL_PIECE_SQUARE = '.piece[class*="square-"]';
-const SEL_CUSTOM_BOARDS = 'wc-chess-board, chess-board';
-const SEL_CLOCK_TURN = '.clock-player-turn';
-const SEL_MOVE_LIST = 'wc-simple-move-list .node';
+const SEL_MOVE_LIST = 'wc-simple-move-list';
+const SEL_MOVE_NODES = 'wc-simple-move-list .node.main-line-ply';
+const SEL_MOVE_CONTENT = '.node-highlight-content';
 const SEL_SELECTED_MOVE = 'wc-simple-move-list .node-highlight-content.selected';
-const SEL_HIGHLIGHT = '.highlight';
-const SEL_MOVE_LIST_EL = 'wc-simple-move-list';
-const SEL_BOARD_LAYOUT = '.board-layout-chessboard';
+const SEL_RESULT = 'wc-simple-move-list .game-result';
+const SEL_BOARD = 'wc-chess-board';
+// The sidebar scroll area that wraps the move list (play page, finished game page)
+const SEL_SCROLL_AREA = '.play-controller-scrollable, .game-tab-scrollable';
+const CLS_FLIPPED = 'flipped';
+const ATTR_GLYPH = 'cheeGlyph';
 
-const CLS_WHITE_MOVE = 'white-move';
-const CLS_BLACK_MOVE = 'black-move';
-const CLS_CLOCK_BLACK = 'black';
-const CLS_CLOCK_WHITE = 'white';
+// SAN tokens only: drops annotation icons and whitespace
+const NON_SAN = /[^A-Za-z0-9=+#-]/g;
 
-const PIECE_REGEX = /\b[wb][rnbqkp]\b/;
-const SQUARE_REGEX = /\bsquare-\d\d\b/;
-
-const MAX_CLASS_PARTS = 4;
-
-const EXPLORE_SEARCHES = [
-  { q: SEL_PIECE_ATTR, label: 'class*=piece' },
-  { q: '[data-piece]', label: 'data-piece' },
-  { q: '[data-square]', label: 'data-square' },
-  { q: '.board-layout-chessboard *', label: 'board-layout children' },
-  { q: 'wc-chess-board', label: 'wc-chess-board' },
-  { q: 'chess-board', label: 'chess-board' },
-  { q: 'canvas', label: 'canvas' },
-];
-
-const EXCLUDED_ATTRS = ['class', 'id', 'xmlns'];
-
-// ─── Shared utilities ─────────────────────────────────────────
-function parseSquareClass(cls) {
-  if (!cls.startsWith(SQUARE_PREFIX) || cls.length < SQUARE_CLASS_MIN_LEN) return null;
-  const sq = cls.substring(SQUARE_PREFIX.length);
-  const file = parseInt(sq[0], 10) - 1;
-  const rank = parseInt(sq[1], 10) - 1;
-  if (file < 0 || file >= BOARD_SIZE || rank < 0 || rank >= BOARD_SIZE) return null;
-  return { file, rank };
-}
-
-function extractSquares(element) {
-  const classes = (element.className || element.getAttribute('class') || '').split(/\s+/);
-  return compact(map(classes, parseSquareClass));
-}
-
-function getClassName(element) {
-  if (element.className && typeof element.className === 'string') return element.className;
-  if (element.className && element.className.baseVal) return element.className.baseVal;
-  return '';
-}
-
-// ─── Piece discovery ──────────────────────────────────────────
-function discoverPieceElements(root) {
-  const pieces = root.querySelectorAll(SEL_PIECE);
-  if (pieces.length > 0) return pieces;
-
-  const byAttr = root.querySelectorAll(SEL_PIECE_ATTR);
-  if (byAttr.length > 0) return byAttr;
-
-  const allEls = root.querySelectorAll('*');
-  const found = filter(Array.from(allEls), (child) => {
-    const cls = child.getAttribute('class') || '';
-    return PIECE_REGEX.test(cls) && SQUARE_REGEX.test(cls);
+// Move text with piece icons (<span data-figurine="N">) turned back into letters
+function readSan(content) {
+  let san = '';
+  forEach(content.childNodes, (child) => {
+    san += child.dataset?.figurine || child.textContent;
   });
-  if (found.length > 0) {
-    log('Found pieces via regex scan:', found.length);
-    return found;
-  }
-
-  return [];
+  return san.replace(NON_SAN, '');
 }
 
-function parsePieceElement(pieceEl) {
-  const classes = (pieceEl.getAttribute('class') || '').split(/\s+/);
-  const pieceCls = find(classes, (cls) => cls.length === 2 && PIECE_MAP[cls]);
-  const sqCls = find(classes, (cls) => parseSquareClass(cls) !== null);
-  if (!pieceCls || !sqCls) return null;
-
-  const { file, rank } = parseSquareClass(sqCls);
-  return { piece: PIECE_MAP[pieceCls], file, rank };
-}
-
-// ─── DOM formatting ───────────────────────────────────────────
-function formatElementAttrs(element) {
-  const attrs = reduce(
-    Array.from(element.attributes),
-    (acc, a) => {
-      if (includes(EXCLUDED_ATTRS, a.name)) return acc;
-      const val = a.value.length > MAX_ATTR_DISPLAY_LEN
-        ? `${a.value.substring(0, MAX_ATTR_DISPLAY_LEN)}...`
-        : a.value;
-      acc.push(`${a.name}=${val}`);
-      return acc;
-    },
-    [],
-  );
-  return attrs.length ? ` [${attrs.join(', ')}]` : '';
-}
-
-function formatElementSummary(element) {
-  const tag = element.tagName.toLowerCase();
-  const id = element.id ? `#${element.id}` : '';
-  const cn = getClassName(element);
-  const cls = cn ? `.${cn.split(' ').slice(0, MAX_CLASS_PARTS).join('.')}` : '';
-  const attrStr = formatElementAttrs(element);
-  const childCount = element.children ? element.children.length : 0;
-  const shadow = element.shadowRoot ? ' (SHADOW ROOT)' : '';
-  const children = childCount > 0 ? ` (${childCount} children)` : '';
-  return `${tag}${id}${cls}${attrStr}${shadow}${children}`;
-}
-
-export class ChesscomAdapter extends BoardAdapter {
-  findBoard() {
-    const pieceContainer = this._findPieceContainer();
-    if (pieceContainer) {
-      log.info('Found piece container:', pieceContainer.tagName, pieceContainer.id, pieceContainer.className);
-      return pieceContainer;
-    }
-
-    const sel = find(BOARD_SELECTORS, (s) => document.querySelector(s));
-    if (!sel) return null;
-    log.info('Board found with selector:', sel);
-    return document.querySelector(sel);
+export class ChesscomAdapter {
+  constructor() {
+    this._observer = null;
   }
 
-  readPieces(boardEl) {
-    const root = boardEl.shadowRoot || boardEl;
-    const elements = discoverPieceElements(root);
-
-    if (elements.length === 0) {
-      log.warn('No pieces found. Exploring board DOM...');
-      this._exploreDOM(root, 0, MAX_EXPLORE_DEPTH);
-      return [];
-    }
-
-    const result = compact(map(Array.from(elements), parsePieceElement));
-
-    if (result.length === 0 && elements.length > 0) {
-      log.warn('Found', elements.length, 'piece-like elements but parsed 0. Sample classes:');
-      forEach(take(Array.from(elements), MAX_LOG_SAMPLES), (el) => {
-        log(' ', el.getAttribute('class'));
-      });
-    }
-
-    return result;
+  _nodes() {
+    return document.querySelectorAll(SEL_MOVE_NODES);
   }
 
-  detectTurn() {
-    const turnIndicators = document.querySelectorAll(SEL_CLOCK_TURN);
-    const clockMatch = find(Array.from(turnIndicators), (indicator) => {
-      const clockEl = indicator.closest('[class*="clock"]');
-      return clockEl && (
-        includes(clockEl.className, CLS_CLOCK_BLACK)
-        || includes(clockEl.className, CLS_CLOCK_WHITE)
-      );
-    });
-
-    if (clockMatch) {
-      const cls = clockMatch.closest('[class*="clock"]').className || '';
-      if (includes(cls, CLS_CLOCK_BLACK)) return TURN_BLACK;
-      return TURN_WHITE;
-    }
-
-    return this._detectTurnFromMoveList();
+  readMoves() {
+    return Array.from(this._nodes(), (node) => readSan(node.querySelector(SEL_MOVE_CONTENT) || node));
   }
 
-  _getHighlightedSquares() {
-    const highlights = document.querySelectorAll(SEL_HIGHLIGHT);
-    if (highlights.length < 2) return null;
-
-    const squares = reduce(
-      Array.from(highlights),
-      (acc, el) => acc.concat(extractSquares(el)),
-      [],
-    );
-    return squares.length >= 2 ? squares : null;
+  // The result row ("1-0", "0-1", "½-½") only appears once the game has ended
+  isGameOver() {
+    const result = document.querySelector(SEL_RESULT);
+    return !!result && result.textContent.trim() !== '';
   }
 
-  detectEnPassant(board) {
-    const squares = this._getHighlightedSquares();
-    if (!squares) return FEN_NONE;
-    return detectEnPassantFromSquares(squares, board);
-  }
-
-  // Returns { index, total } where index is the 0-based active node index
-  // (-1 if no active node), total is the move node count.
-  _getActiveNodeIndex() {
-    const moveNodes = document.querySelectorAll(SEL_MOVE_LIST);
-    const total = moveNodes.length;
-    const selectedContent = document.querySelector(SEL_SELECTED_MOVE);
-    const activeNode = selectedContent ? selectedContent.closest('.node') : null;
-    const index = indexOfNode(moveNodes, activeNode);
-    return { index, total };
-  }
-
-  detectMoveCount() {
-    const { index, total } = this._getActiveNodeIndex();
-    if (total === 0) return 1;
-    const halfMoves = index >= 0 ? index : total - 1;
-    return Math.floor(halfMoves / 2) + 1;
+  // The player sits at the bottom of the board
+  playerColor() {
+    const board = document.querySelector(SEL_BOARD);
+    return board && board.classList.contains(CLS_FLIPPED) ? TURN_BLACK : TURN_WHITE;
   }
 
   detectPly() {
-    const { index, total } = this._getActiveNodeIndex();
-    return index >= 0 ? index + 1 : total;
+    const nodes = this._nodes();
+    const selected = document.querySelector(SEL_SELECTED_MOVE);
+    const index = indexOfNode(nodes, selected ? selected.closest('.node') : null);
+    return index >= 0 ? index + 1 : nodes.length;
   }
 
-  getPanelAnchor(boardEl) {
-    return boardEl;
+  jumpToPly(ply) {
+    const node = this._nodes()[ply - 1];
+    if (!node) return false;
+    (node.querySelector(SEL_MOVE_CONTENT) || node).click();
+    return true;
   }
 
-  isFlipped(boardEl) {
-    if (boardEl.hasAttribute('flipped')) return true;
-    if (boardEl.classList && boardEl.classList.contains('flipped')) return true;
-    const style = window.getComputedStyle(boardEl);
-    return !!(style.transform && includes(style.transform, 'rotate(180deg)'));
+  // The panel is inserted right before this element
+  getMountPoint() {
+    const list = document.querySelector(SEL_MOVE_LIST);
+    if (!list) return null;
+    return list.closest(SEL_SCROLL_AREA) || list;
   }
 
-  observe(boardEl, onChange) {
+  // Annotates moves through a data attribute (rendered by CSS) so the move text stays untouched
+  markMoves(glyphs) {
+    forEach(this._nodes(), (node, i) => {
+      const glyph = glyphs.get(i + 1);
+      if (glyph) node.dataset[ATTR_GLYPH] = glyph;
+      else delete node.dataset[ATTR_GLYPH];
+    });
+  }
+
+  observe(onChange) {
     this.disconnect();
-
     this._observer = new MutationObserver(onChange);
-    const observeTarget = boardEl.shadowRoot || boardEl;
-    this._observer.observe(observeTarget, {
+    this._observer.observe(document.body, {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['class', 'style', 'transform'],
-    });
-
-    const moveList = document.querySelector(SEL_MOVE_LIST_EL);
-    if (moveList) {
-      this._moveListObserver = new MutationObserver(onChange);
-      this._moveListObserver.observe(moveList, { childList: true, subtree: true });
-    }
-  }
-
-  findAlternatePieceContainer(boardEl) {
-    const container = this._findPieceContainer();
-    if (!container || container === boardEl) return null;
-    log(
-      'Piece container found (different from board):',
-      container.tagName,
-      container.id,
-      container.className,
-    );
-    return container;
-  }
-
-  exploreBoardArea() {
-    forEach(EXPLORE_SEARCHES, (s) => {
-      const els = document.querySelectorAll(s.q);
-      if (els.length === 0) return;
-      log('Found', els.length, 'elements for:', s.label);
-      forEach(take(Array.from(els), MAX_LOG_SAMPLES), (el) => {
-        const cls = getClassName(el).substring(0, MAX_CLASS_DISPLAY_LEN);
-        log(
-          ' ',
-          el.tagName,
-          el.id || '',
-          cls,
-          el.getAttribute('data-piece') || '',
-          el.getAttribute('data-square') || '',
-        );
-      });
-    });
-
-    const layout = document.querySelector(SEL_BOARD_LAYOUT);
-    if (layout) {
-      log('board-layout-chessboard children:');
-      this._exploreDOM(layout, 0, MAX_EXPLORE_DEPTH_LAYOUT);
-    }
-
-    forEach(document.querySelectorAll('*'), (el) => {
-      if (!el.shadowRoot) return;
-      const pieces = el.shadowRoot.querySelectorAll(`${SEL_PIECE}, ${SEL_PIECE_ATTR}`);
-      if (pieces.length > 0) {
-        log('Found', pieces.length, 'pieces in shadowRoot of', el.tagName, el.id, el.className);
-      }
+      attributeFilter: ['class'],
     });
   }
 
-  _findPieceContainer() {
-    const pieceEl = document.querySelector(SEL_PIECE_SQUARE);
-    if (pieceEl) {
-      let container = pieceEl.parentElement;
-      while (container && container.querySelectorAll(SEL_PIECE).length < MIN_PIECE_CONTAINER_COUNT) {
-        container = container.parentElement;
-      }
-      return container;
-    }
-
-    return find(
-      Array.from(document.querySelectorAll(SEL_CUSTOM_BOARDS)),
-      (el) => el.shadowRoot && el.shadowRoot.querySelectorAll(SEL_PIECE).length > 0,
-    ) || null;
-  }
-
-  _detectTurnFromMoveList() {
-    const { index, total } = this._getActiveNodeIndex();
-    if (total === 0) return TURN_WHITE;
-
-    // Find the active node (selected or last)
-    const moveNodes = document.querySelectorAll(SEL_MOVE_LIST);
-    const node = index >= 0 ? moveNodes[index] : moveNodes[total - 1];
-
-    if (node) {
-      if (node.classList.contains(CLS_WHITE_MOVE)) return TURN_BLACK;
-      if (node.classList.contains(CLS_BLACK_MOVE)) return TURN_WHITE;
-    }
-
-    return total % 2 === 0 ? TURN_WHITE : TURN_BLACK;
-  }
-
-  _exploreDOM(root, depth, maxDepth) {
-    if (depth > maxDepth) return;
-    const { children } = root;
-    if (!children) return;
-
-    const indent = '  '.repeat(depth);
-    forEach(take(Array.from(children), MAX_EXPLORE_CHILDREN), (child) => {
-      log(`${indent}${formatElementSummary(child)}`);
-
-      if (child.shadowRoot && depth < maxDepth) {
-        log(`${indent}  [shadow-root]:`);
-        this._exploreDOM(child.shadowRoot, depth + 1, maxDepth);
-      }
-
-      if (child.children && child.children.length > 0 && depth < maxDepth) {
-        this._exploreDOM(child, depth + 1, maxDepth);
-      }
-    });
+  disconnect() {
+    if (this._observer) { this._observer.disconnect(); this._observer = null; }
   }
 }
