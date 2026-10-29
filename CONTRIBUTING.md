@@ -3,8 +3,9 @@
 ## Setup
 
 ```bash
-git clone https://github.com/hong4rc/chee.git
+git clone https://github.com/ram4nd/chee.git
 cd chee
+git checkout eval-chart-only
 npm install
 npm run build
 ```
@@ -70,4 +71,4 @@ Enable debug logging in the browser console:
 localStorage.debug = 'chee:*'
 ```
 
-Or toggle it from the extension popup (Settings tab → Debug logging).
+Or turn on **Debug** in the extension popup.

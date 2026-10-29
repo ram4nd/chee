@@ -29,14 +29,10 @@ body:
     attributes:
       label: Area
       options:
-        - Analysis panel
-        - Move classification
-        - Arrows / hints
-        - Puzzle mode
-        - Trapboy
-        - PGN export
+        - Eval chart
+        - Mistake detection
+        - Review panel
         - Popup / settings
-        - Multi-site support
         - Other
     validations:
       required: true

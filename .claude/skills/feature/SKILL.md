@@ -15,11 +15,11 @@ Execute the full flow below. Use the TodoWrite tool to track progress through al
 
 Launch **parallel** Explore agents to investigate the codebase:
 - **Agent 1**: Search for similar existing functionality and related modules
-- **Agent 2**: Read files that will need changes (adapters, plugins, core, popup)
-- **Agent 3**: Check how existing plugins wire up (setup, slots, events, coordinator registration)
+- **Agent 2**: Read files that will need changes (adapter, review logic, core, popup)
+- **Agent 3**: Trace how the change flows through `ReviewCoordinator`
 
 Then synthesize findings into a plan:
-1. Determine the right architectural approach (plugin, adapter, core, popup, hint-page)
+1. Determine the right architectural approach (adapter, review logic, core, popup); anything showing engine output stays behind the game-over lock
 2. Write a numbered implementation checklist using TodoWrite
 3. **Present the plan and wait for user approval before proceeding**
 
@@ -39,7 +39,8 @@ After the plan is approved, implement each step:
    - Debug logging via `createDebug('chee:namespace')`
    - No `console.log`, no magic numbers, no magic strings — use named constants from `src/constants.js`
    - Max 120 char lines
-   - Tests use named constant imports, not hardcoded values (`GUARD_DEPTH` not `8`)
+   - Tests use named constant imports, not hardcoded values (`MATE_CP` not `1000`)
+   - Write or update the test first and watch it fail
 3. Keep changes minimal — only what the plan specifies
 4. Mark each TodoWrite item done as you complete it
 5. **When debugging**: ask the user for clarification — what they see, what they expected, exact reproduction steps — before diving into code. Guessing wastes time.
@@ -60,20 +61,19 @@ Run validation tools in parallel where possible:
 ## Phase 4: Review (use Agent tools for parallel review)
 
 Launch **parallel** review agents on your own changes:
-- **Agent 1 (Architecture)**: Verify adapter/plugin/module patterns are followed
+- **Agent 1 (Architecture)**: Fair-play gate intact (no engine loaded or shown during a live game); adapter/review/core boundaries respected
 - **Agent 2 (Conventions)**: Check imports, constants, naming, debug logging
 - **Agent 3 (Logic bugs)**: Key checklist:
-  - DOM timing: state may not be updated when MutationObserver fires
-  - Engine state machine: IDLE/INITIALIZING/READY/ANALYZING transitions
-  - Secondary analysis isolation: searchmoves on same FEN leaks evals into main pipeline. Use `_dropUntilNewAnalysis` + `savedEval`. Resume engine only if savedEval incomplete.
-  - MultiPV partial fills: at shallow depth, not all lines filled. Process available, treat unfilled as worst-case.
-  - Race conditions: debounce, async sequences, in-flight evals after stop
+  - DOM timing: chess.com updates the move-list highlight after the board; the list may still be rendering when the result row appears
+  - Engine state machine: IDLE/INITIALIZING/READY/ANALYZING/ERROR; `stop()` drops queued work, `shutdown()` unloads the worker
+  - Results matched by `fen`; interrupted searches never reported
+  - Failures (engine, unreadable games) shown in the panel, never an endless "Analysing"
+  - Race conditions: debounce, results arriving after lock or a move-list change
 - **Agent 4 (Performance)**: Key checklist:
-  - Settings changes: each plugin handles own ON/OFF in `onSettingsChange`, no broadcast replay
-  - Double-render: visual cleared then immediately redrawn in same flow?
-  - Engine work: re-analysis when cache/savedEval would suffice?
-  - Shared state: settings reference replaced with partial object?
-  - Log serialization: objects become `[object Object]` in ring buffer — use JSON.stringify or template literals
+  - `sync()` stays cheap on page mutations when nothing changed
+  - Engine work: re-analysis when the `fen|depth` cache would suffice?
+  - Double-render: chart or list rebuilt more than once per result?
+  - Log serialization: objects become `[object Object]` in ring buffer; use JSON.stringify or template literals
 
 Fix any issues found. Re-run validation if fixes were needed.
 
@@ -92,9 +92,9 @@ Fix any issues found. Re-run validation if fixes were needed.
 ## Phase 6: Documentation & Skill Update
 
 ### Check if docs need updating
-- New plugin → update `CLAUDE.md` Architecture/Plugins section
-- New setting → update `CLAUDE.md` Settings section
-- New hint page → update `CLAUDE.md` Puzzle/Hint Mode section
+- New module → update `CLAUDE.md` Architecture section
+- New setting → update `CLAUDE.md` and README
+- New chess.com selector → update `CLAUDE.md` DOM structure section
 - New constants → verify documented in relevant section
 - **Only update affected docs**
 
@@ -102,7 +102,7 @@ Fix any issues found. Re-run validation if fixes were needed.
 Most skill updates should already be done (Phase 2 step 6). Final check:
 - Any remaining lessons? → Add to `/review` or `/feature` skill
 - New architectural pattern? → Add to `/plan` skill
-- SVG/CSS rendering issues? → Add to `/review` skill
+- Chart/CSS rendering issues? → Add to `/review` skill
 
 ---
 
