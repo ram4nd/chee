@@ -6,7 +6,7 @@ These Terms of Service ("Terms") govern your use of the Chee browser extension (
 
 ## 1. Description
 
-Chee is a free Chrome extension that provides real-time chess analysis using Stockfish on chess.com and lichess.org. All analysis runs locally in your browser.
+Chee is a free Chrome extension that reviews finished chess.com games using Stockfish. All analysis runs locally in your browser.
 
 ## 2. Age Requirement
 
@@ -16,9 +16,9 @@ You must be at least 18 years old to use Chee.
 
 By using Chee, you acknowledge that:
 
-- Chee provides real-time engine analysis on live chess games and puzzles.
+- Chee shows engine analysis only after a game has ended, and does not run during live games.
 - You are solely responsible for how you use the Extension and any consequences that result from its use.
-- Using chess engines during rated or competitive games may violate the terms of service of chess platforms such as chess.com and lichess.org, and may result in account suspension or banning.
+- Using chess engines during rated or competitive games may violate the terms of service of chess platforms such as chess.com, and may result in account suspension or banning.
 - You understand the nature of this tool and accept full responsibility for your actions.
 
 ## 4. No Data Collection

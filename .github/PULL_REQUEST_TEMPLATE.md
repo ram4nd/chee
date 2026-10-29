@@ -12,7 +12,7 @@
 - [ ] Lines within 120 characters
 - [ ] ESLint passes (`npm run lint`)
 - [ ] Tests pass (`npm run test`)
-- [ ] Tested manually in Chrome on chess.com / lichess.org
+- [ ] Tested manually in Chrome on chess.com
 
 ## Type of change
 

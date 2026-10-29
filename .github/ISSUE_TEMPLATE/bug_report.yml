@@ -3,27 +3,12 @@ description: Report a bug with Chee
 labels: [bug]
 body:
   - type: dropdown
-    id: site
-    attributes:
-      label: Site
-      options:
-        - chess.com
-        - lichess.org
-        - Both
-    validations:
-      required: true
-
-  - type: dropdown
     id: page
     attributes:
       label: Page type
       options:
-        - Live game
-        - Game review
-        - Puzzle (rated)
-        - Puzzle Rush
-        - Puzzle Battle
-        - Puzzle Learning
+        - Finished game (/game)
+        - Game vs computer or player (/play)
         - Daily chess
         - Other
     validations:

@@ -42,7 +42,6 @@ Use the Agent tool to launch **parallel** review agents simultaneously:
 - **Puzzle mode**: Hint-page forced overrides respected? Storage changes to forced keys filtered?
 - **Race conditions**: MutationObserver → 100ms debounce → read → analyze. Unguarded async sequences? In-flight evals arriving after `engine.stop()`?
 - **Memory leaks**: Observers, listeners, intervals cleaned up?
-- **Cross-site**: Works on both chess.com and lichess? Different DOM structures
 - **Secondary analysis isolation**: `requestSecondaryAnalysis` with `searchmoves` on the same FEN — leftover evals leak into `_applyEval` after secondary clears, contaminating `_lastEvalData` and panel. Must use `_dropUntilNewAnalysis` flag + `savedEval` restore. Resume engine only if savedEval was incomplete (`!savedEval.complete`).
 - **MultiPV partial fills**: At shallow depth, Stockfish may not fill all MultiPV lines. Don't wait for all lines — process what's available and treat unfilled moves as worst-case (Stockfish fills best-to-worst).
 - **Settings real-time**: Each plugin handles own ON/OFF in `onSettingsChange(settings, renderCtx)`. No broadcast replay patterns. Plugin must clear visuals on toggle-off and restore from cached data on toggle-on.

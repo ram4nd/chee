@@ -32,7 +32,7 @@ Understand the data flow: MutationObserver → adapter → FEN → engine → pa
 Features hooking into analysis lifecycle → extend `AnalysisPlugin`, self-register in `setup()`, use panel slots, communicate via `broadcastToPlugins`/`onPluginEvent`
 
 ### Adapter change?
-Site-specific DOM reading → `adapters/chesscom.js` or `adapters/lichess.js`
+Site-specific DOM reading → `adapters/chesscom.js`
 
 ### Core module change?
 Engine/panel/arrow/coordinator → keep module boundaries clean, coordinator orchestrates only
