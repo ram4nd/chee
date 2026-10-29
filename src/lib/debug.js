@@ -1,6 +1,6 @@
 // Lightweight ESM debug logger
 // Enable via: localStorage.debug = 'chee:*'
-// Specific: localStorage.debug = 'chee:engine,chee:panel'
+// Specific: localStorage.debug = 'chee:engine,chee:coordinator'
 // Disable: localStorage.removeItem('debug')
 
 import { includes, some, forEach } from 'lodash-es';

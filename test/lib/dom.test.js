@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import {
-  el, svgEl, indexOfNode, SVG_NS,
+  el, indexOfNode,
 } from '../../src/lib/dom.js';
 
 describe('el', () => {
@@ -29,26 +29,6 @@ describe('el', () => {
   it('leaves className empty when not provided', () => {
     const node = el('div');
     expect(node.className).toBe('');
-  });
-});
-
-describe('svgEl', () => {
-  it('creates an SVG element with correct namespace', () => {
-    const node = svgEl('circle');
-    expect(node.namespaceURI).toBe(SVG_NS);
-    expect(node.tagName).toBe('circle');
-  });
-
-  it('sets attributes when provided', () => {
-    const node = svgEl('rect', { width: '100', height: '50', fill: 'red' });
-    expect(node.getAttribute('width')).toBe('100');
-    expect(node.getAttribute('height')).toBe('50');
-    expect(node.getAttribute('fill')).toBe('red');
-  });
-
-  it('creates element without attributes', () => {
-    const node = svgEl('g');
-    expect(node.tagName).toBe('g');
   });
 });
 

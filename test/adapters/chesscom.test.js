@@ -1,36 +1,45 @@
 // @vitest-environment jsdom
 import {
-  describe, it, expect, beforeEach, vi,
+  describe, it, expect, beforeEach, afterEach,
 } from 'vitest';
 import { ChesscomAdapter } from '../../src/adapters/chesscom.js';
 import { TURN_WHITE, TURN_BLACK } from '../../src/constants.js';
 
-function node(cls, inner, selected = false) {
-  return `<div class="node ${cls} main-line-ply"><span class="node-highlight-content${selected ? ' selected' : ''}">${inner}</span></div>`;
+function node(cls, inner) {
+  return `<div class="node ${cls} main-line-ply"><span class="node-highlight-content">${inner}</span></div>`;
 }
 
-function render({ result = '', selected = -1, flipped = false } = {}) {
+function render({ selected = -1, flipped = false } = {}) {
   const moves = [
     node('white-move', 'e4 '),
     node('black-move', '<span class="icon-font-chess knight-black" data-figurine="N"></span> c6 '),
     node('white-move', 'e8=<span class="icon-font-chess queen-white" data-figurine="Q"></span>+ '),
   ].map((html, i) => (i === selected ? html.replace('node-highlight-content', 'node-highlight-content selected') : html));
   document.body.innerHTML = `
-    <wc-chess-board class="board${flipped ? ' flipped' : ''}"></wc-chess-board>
-    <div class="sidebar">
-      <wc-eco-opening></wc-eco-opening>
-      <div class="play-controller-scrollable">
-        <wc-simple-move-list>
-          <div class="main-line-row">${moves.join('')}</div>
-          ${result ? `<div class="main-line-row result-row"><span class="game-result">${result} </span></div>` : ''}
-        </wc-simple-move-list>
-      </div>
-    </div>`;
+    <div class="board-layout-chessboard">
+      <div class="board-layout-evaluation"><div id="evaluation"></div></div>
+      <wc-chess-board class="board${flipped ? ' flipped' : ''}"></wc-chess-board>
+    </div>
+    <wc-simple-move-list><div class="main-line-row">${moves.join('')}</div></wc-simple-move-list>`;
 }
 
 describe('ChesscomAdapter', () => {
   let adapter;
   beforeEach(() => { adapter = new ChesscomAdapter(); });
+  afterEach(() => { window.history.replaceState(null, '', '/'); });
+
+  it('is active only on the bot page', () => {
+    window.history.replaceState(null, '', '/play/computer');
+    expect(adapter.isBotGame()).toBe(true);
+    window.history.replaceState(null, '', '/play/computer/discover');
+    expect(adapter.isBotGame()).toBe(true);
+    window.history.replaceState(null, '', '/play/online');
+    expect(adapter.isBotGame()).toBe(false);
+    window.history.replaceState(null, '', '/game/live/123');
+    expect(adapter.isBotGame()).toBe(false);
+    window.history.replaceState(null, '', '/play/computers');
+    expect(adapter.isBotGame()).toBe(false);
+  });
 
   it('reads SAN moves, including figurine icons', () => {
     render();
@@ -42,21 +51,7 @@ describe('ChesscomAdapter', () => {
     expect(adapter.readMoves()).toEqual([]);
   });
 
-  it('treats the game as over only when a result is shown', () => {
-    render();
-    expect(adapter.isGameOver()).toBe(false);
-    render({ result: '0-1' });
-    expect(adapter.isGameOver()).toBe(true);
-  });
-
-  it('stays locked without a move list or with an empty result', () => {
-    document.body.innerHTML = '<span class="game-result">1-0</span>';
-    expect(adapter.isGameOver()).toBe(false);
-    render({ result: ' ' });
-    expect(adapter.isGameOver()).toBe(false);
-  });
-
-  it('reads castling and checks and ignores annotation icons', () => {
+  it('reads castling and checks, ignores annotation icons and variations', () => {
     document.body.innerHTML = `<wc-simple-move-list>
       ${node('white-move', 'O-O ')}
       ${node('black-move', 'O-O-O<span class="annotation">?!</span> ')}
@@ -80,32 +75,11 @@ describe('ChesscomAdapter', () => {
     expect(adapter.detectPly()).toBe(0);
   });
 
-  it('jumps to a ply by clicking its move', () => {
+  it('finds the eval bar slot beside the board', () => {
     render();
-    const click = vi.fn();
-    document.querySelectorAll('.node-highlight-content')[1].addEventListener('click', click);
-    expect(adapter.jumpToPly(2)).toBe(true);
-    expect(click).toHaveBeenCalled();
-  });
-
-  it('jumps to the start with the first-move button', () => {
-    render();
-    document.body.insertAdjacentHTML('beforeend', '<button aria-label="First Move"></button>');
-    const click = vi.fn();
-    document.querySelector('[aria-label="First Move"]').addEventListener('click', click);
-    expect(adapter.jumpToPly(0)).toBe(true);
-    expect(click).toHaveBeenCalled();
-  });
-
-  it('reports a jump it cannot make', () => {
-    render();
-    expect(adapter.jumpToPly(0)).toBe(false);
-    expect(adapter.jumpToPly(9)).toBe(false);
-  });
-
-  it('mounts the panel above the scrolling move list', () => {
-    render();
-    expect(adapter.getMountPoint()).toBe(document.querySelector('.play-controller-scrollable'));
+    expect(adapter.getBarSlot()).toBe(document.querySelector('.board-layout-evaluation'));
+    document.body.innerHTML = '';
+    expect(adapter.getBarSlot()).toBeNull();
   });
 
   it('marks moves with glyphs without changing their text', () => {

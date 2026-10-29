@@ -9,8 +9,6 @@ export default defineConfig({
       exclude: [
         'src/content.js',
         'src/popup.js',
-        'src/core/renderers/**',
-        'src/core/panel.js',
         'src/adapters/**',
       ],
     },

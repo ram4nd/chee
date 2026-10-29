@@ -20,7 +20,6 @@ const MSG_READY = 'ready';
 const MSG_EVAL = 'eval';
 const MSG_ERROR = 'error';
 const MSG_POSITION = 'position';
-const MSG_STOP = 'stop';
 
 // ─── State ───────────────────────────────────────────────────
 let currentScore = null; // { score, mate } from the latest info line
@@ -128,13 +127,6 @@ function sendStop() {
   sendUCI('stop');
 }
 
-function requestStop() {
-  if (analyzing) {
-    sendStop();
-    // Don't set analyzing = false here — wait for bestmove
-  }
-}
-
 function analyzePosition(request) {
   if (!isReady) {
     pending = request;
@@ -147,11 +139,6 @@ function analyzePosition(request) {
     return;
   }
   startAnalysis(request);
-}
-
-function stopAnalysis() {
-  pending = null;
-  requestStop();
 }
 
 function bootstrapStockfish() {
@@ -200,8 +187,6 @@ function bootstrapStockfish() {
     const msg = e.data;
     if (msg.type === MSG_POSITION) {
       analyzePosition({ fen: msg.fen, depth: msg.depth });
-    } else if (msg.type === MSG_STOP) {
-      stopAnalysis();
     }
   };
 

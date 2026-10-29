@@ -1,25 +1,14 @@
 import { toInteger } from 'lodash-es';
 import { loadSettings } from './lib/settings.js';
-import { applyTheme } from './lib/themes.js';
 import { SETTINGS_DEFAULTS } from './constants.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
   const settings = await loadSettings();
-  applyTheme(document.body, settings.theme);
 
   // Version info
   const { version } = chrome.runtime.getManifest();
   const versionEl = document.getElementById('chee-version');
   if (versionEl) versionEl.textContent = `v${version} (${__COMMIT_HASH__})`;
-
-  // Theme dropdown
-  const themeSelect = document.getElementById('theme-select');
-  themeSelect.value = settings.theme;
-  themeSelect.addEventListener('change', () => {
-    const val = themeSelect.value;
-    chrome.storage.sync.set({ theme: val });
-    applyTheme(document.body, val);
-  });
 
   // Auto-wire all checkboxes with data-key attribute
   document.querySelectorAll('input[type="checkbox"][data-key]').forEach((cb) => {
@@ -75,7 +64,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             sections.push(`URL: ${page.url}`);
             if (page.error) sections.push(`Error: ${page.error}`);
             sections.push(`Engine: ${page.engineState}, FEN: ${page.engineFen || 'none'}`);
-            sections.push(`Game over: ${page.gameOver}, Moves: ${page.moves}, Ply: ${page.ply}`);
+            sections.push(`Bot game: ${page.botGame}, Moves: ${page.moves}, Ply: ${page.ply}`);
             if (page.logs && page.logs.length > 0) {
               sections.push('');
               sections.push('--- Recent Logs ---');

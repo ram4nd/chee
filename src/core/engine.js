@@ -5,7 +5,7 @@ import { Emitter } from '../lib/emitter.js';
 import {
   WORKER_FILE, STOCKFISH_JS_FILE, STOCKFISH_WASM_FILE,
   EVT_READY, EVT_EVAL, EVT_ERROR,
-  MSG_SETUP, MSG_READY, MSG_EVAL, MSG_ERROR, MSG_POSITION, MSG_STOP,
+  MSG_SETUP, MSG_READY, MSG_EVAL, MSG_ERROR, MSG_POSITION,
   SEARCH_DEPTH,
 } from '../constants.js';
 
@@ -120,16 +120,6 @@ export class Engine extends Emitter {
     this._state = State.ANALYZING;
     this._currentFen = fen;
     this._worker.postMessage({ type: MSG_POSITION, fen, depth: this._depth });
-  }
-
-  stop() {
-    this._pendingFen = null;
-    if (this._worker) {
-      this._worker.postMessage({ type: MSG_STOP });
-      if (this._state === State.ANALYZING) {
-        this._state = State.READY;
-      }
-    }
   }
 
   // Applies from the next analyze() call

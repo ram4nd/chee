@@ -47,14 +47,6 @@ describe('stockfish worker', () => {
     }]);
   });
 
-  it('does not report a stopped search', () => {
-    send({ type: 'position', fen: 'F1', depth: 12 });
-    engineSays('info depth 3 score cp 10');
-    send({ type: 'stop' });
-    engineSays('bestmove e2e4');
-    expect(evals()).toEqual([]);
-  });
-
   it('switches to a new position without reporting the interrupted one', () => {
     send({ type: 'position', fen: 'F1', depth: 12 });
     engineSays('info depth 3 score cp 10');

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Chee - Game Review Chart",
+  "name": "Chee - Bot Game Eval Bar",
   "version": "2.0.1",
-  "description": "Stockfish eval chart and your mistakes on chess.com, shown only after the game ends",
+  "description": "Stockfish eval bar and move feedback in games against chess.com bots only",
   "homepage_url": "https://github.com/ram4nd/chee",
   "permissions": [
     "storage"
@@ -23,15 +23,13 @@
   "content_scripts": [
     {
       "matches": [
-        "*://www.chess.com/game/*",
-        "*://www.chess.com/play/*",
-        "*://www.chess.com/daily/*"
+        "*://www.chess.com/play/*"
       ],
       "js": [
         "content.js"
       ],
       "css": [
-        "panel.css"
+        "eval-bar.css"
       ],
       "run_at": "document_idle"
     }

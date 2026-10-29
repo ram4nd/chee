@@ -7,9 +7,7 @@ body:
     attributes:
       label: Page type
       options:
-        - Finished game (/game)
-        - Game vs computer or player (/play)
-        - Daily chess
+        - Game vs bot (/play/computer)
         - Other
     validations:
       required: true

@@ -29,9 +29,8 @@ body:
     attributes:
       label: Area
       options:
-        - Eval chart
-        - Mistake detection
-        - Review panel
+        - Eval bar
+        - Move marks
         - Popup / settings
         - Other
     validations:

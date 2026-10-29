@@ -1,12 +1,12 @@
-// Chee - Chess Review Chart Extension
+// Chee - eval bar for games against chess.com bots
 // Entry point: bootstrap only — loads settings, creates modules, starts the coordinator.
 
 import createDebug, { getLogBuffer } from './lib/debug.js';
 import { loadSettings, normalizeSettings } from './lib/settings.js';
 import { ChesscomAdapter } from './adapters/chesscom.js';
 import { Engine } from './core/engine.js';
-import { Panel } from './core/panel.js';
-import { ReviewCoordinator } from './core/coordinator.js';
+import { EvalBar } from './core/eval-bar.js';
+import { BotCoordinator } from './core/coordinator.js';
 import { SETTINGS_DEFAULTS } from './constants.js';
 
 const log = createDebug('chee:content');
@@ -20,9 +20,9 @@ async function main() {
 
   const adapter = new ChesscomAdapter();
   const engine = new Engine();
-  const panel = new Panel();
-  const coordinator = new ReviewCoordinator({
-    engine, panel, adapter, settings,
+  const bar = new EvalBar();
+  const coordinator = new BotCoordinator({
+    engine, bar, adapter, settings,
   });
 
   // pagehide replaces the deprecated unload; a page kept in the back/forward cache stays alive
@@ -47,7 +47,7 @@ async function main() {
         url: window.location.href,
         engineState: engine.state,
         engineFen: engine.currentFen,
-        gameOver: adapter.isGameOver(),
+        botGame: adapter.isBotGame(),
         moves: adapter.readMoves().length,
         ply: adapter.detectPly(),
         logs: getLogBuffer(),

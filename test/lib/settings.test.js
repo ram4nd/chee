@@ -20,7 +20,7 @@ describe('settings', () => {
     const settings = await loadSettings();
     expect(get).toHaveBeenCalledWith(SETTINGS_DEFAULTS);
     expect(settings.searchDepth).toBe(18);
-    expect(settings.theme).toBe('site');
+    expect(settings.debugMode).toBe(false);
   });
 
   it('moves a depth the popup no longer offers to the nearest one', async () => {
@@ -37,9 +37,9 @@ describe('settings', () => {
 
   it('normalises changed values, restoring defaults for removed keys', async () => {
     const { normalizeSettings } = await load({});
-    expect(normalizeSettings({ searchDepth: undefined, theme: undefined })).toEqual({
+    expect(normalizeSettings({ searchDepth: undefined, debugMode: undefined })).toEqual({
       searchDepth: SETTINGS_DEFAULTS.searchDepth,
-      theme: SETTINGS_DEFAULTS.theme,
+      debugMode: SETTINGS_DEFAULTS.debugMode,
     });
     expect(normalizeSettings({ searchDepth: 13 })).toEqual({ searchDepth: 12 });
   });

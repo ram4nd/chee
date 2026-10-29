@@ -1,7 +1,7 @@
 {
   "name": "chee",
   "version": "2.0.1",
-  "description": "Stockfish eval chart and your mistakes on chess.com, shown only after the game ends",
+  "description": "Stockfish eval bar and move feedback in games against chess.com bots only",
   "author": "Hong4rc <hong4rc@gmail.com>",
   "license": "GPL-3.0",
   "repository": {
@@ -23,9 +23,6 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "clean": "rm -rf dist",
-    "release": "release-it",
-    "release:minor": "release-it minor",
-    "release:major": "release-it major",
     "pack": "npm run build && cd dist && zip -r ../chee-v$(node -p \"require('../package.json').version\").zip . -x '.*'",
     "prepare": "lefthook install"
   },
@@ -33,7 +30,6 @@
     "@commitlint/cli": "^21.2.4",
     "@commitlint/config-conventional": "^21.2.4",
     "@eslint/eslintrc": "^3.3.7",
-    "@release-it/conventional-changelog": "^12.0.2",
     "@rollup/plugin-node-resolve": "^16.0.3",
     "@rollup/plugin-replace": "^6.0.3",
     "@vitest/coverage-v8": "^5.0.5",
@@ -43,7 +39,6 @@
     "globals": "^17.13.0",
     "jsdom": "^30.1.3",
     "lefthook": "^2.2.2",
-    "release-it": "^21.1.1",
     "rollup": "^4.66.0",
     "rollup-plugin-copy": "^3.5.0",
     "vite": "^8.3.5",

@@ -1,8 +1,10 @@
 # Chee
 
-Post-game review for chess.com, powered by Stockfish WASM. When your game ends, a panel above the move list shows an eval chart of the whole game and lists your mistakes. While a game is in progress nothing is shown and the engine is not loaded, so it stays within fair-play rules.
+A Stockfish eval bar for games against chess.com's computer bots. While you play a bot, a bar beside the board shows the evaluation, and your inaccuracies, mistakes and blunders get marked in the move list as you make them.
 
-This is a fork of [hong4rc/chee](https://github.com/hong4rc/chee), reworked from a live analysis overlay into a review-only tool.
+It only works against bots. On any other page, including games against people, the engine is not loaded and nothing is shown.
+
+This is a fork of [hong4rc/chee](https://github.com/hong4rc/chee).
 
 ## Install
 
@@ -23,15 +25,15 @@ After rebuilding, click the reload icon on the Chee card.
 
 ## Usage
 
-Finish a game on chess.com, or open a finished one (`/game/*`, `/play/*` or `/daily/*`). The **Chee review** panel analyses every position, then:
+Open chess.com's **Play → Bots** page (`/play/computer`) and start a game. Then:
 
-- shows the eval chart: hover for scores, click to jump to a move, coloured dots mark your mistakes
-- lists your inaccuracies (?!), mistakes (?) and blunders (??) and marks them in the move list
-- jumps to the position before a mistake when you click it, so you can look for the better move yourself; **Best move?** reveals the engine's choice
+- the eval bar in the column left of the board follows the game: white fills from your side when white is better, and the score shows at the end of the side that is ahead
+- your moves get `?!` (inaccuracy), `?` (mistake) or `??` (blunder) in the move list once both positions around them are analysed
+- stepping back through moves shows the eval for that position
 
-The side at the bottom of the board is treated as you. Variant games (Chess960, crazyhouse) are not reviewed.
+The side at the bottom of the board is treated as you. Variant games (Chess960, crazyhouse) show an error on the bar instead of an eval.
 
-The popup sets the theme (Catppuccin Latte, Frappé, Macchiato, Mocha, or match the site), the search depth (12, 15, 18 or 20) and debug logging.
+The popup sets the search depth (12, 15, 18 or 20) and debug logging.
 
 ## Development
 

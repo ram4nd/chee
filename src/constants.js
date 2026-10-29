@@ -21,7 +21,6 @@ export const MSG_READY = EVT_READY;
 export const MSG_EVAL = EVT_EVAL;
 export const MSG_ERROR = EVT_ERROR;
 export const MSG_POSITION = 'position';
-export const MSG_STOP = 'stop';
 
 // ─── Engine config ───────────────────────────────────────────
 export const SEARCH_DEPTH = 15;
@@ -29,18 +28,16 @@ export const SEARCH_DEPTH = 15;
 export const SEARCH_DEPTHS = [12, 15, 18, 20];
 export const SETTINGS_DEFAULTS = {
   searchDepth: SEARCH_DEPTH,
-  theme: 'site',
-  panelMinimized: false,
   debugMode: false,
 };
 
-// ─── Panel / eval display ────────────────────────────────────
-export const PANEL_ID = 'chee-analysis-panel';
+// ─── Eval display ────────────────────────────────────────────
+export const BAR_ID = 'chee-eval-bar';
 export const CENTIPAWN_DIVISOR = 100;
 export const MATE_PREFIX = 'M';
 export const MATE_NEG_PREFIX = '-M';
 
-// ─── Review ──────────────────────────────────────────────────
+// ─── Move grading ─────────────────────────────────────────
 // Mate is scored as ±MATE_CP; other scores are capped just below it (like lichess) so only mates reach it
 export const MATE_CP = 1000;
 export const SEVERITY_INACCURACY = 'inaccuracy';

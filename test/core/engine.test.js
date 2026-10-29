@@ -4,7 +4,7 @@ import {
 import { Engine } from '../../src/core/engine.js';
 import {
   EVT_READY, EVT_EVAL, EVT_ERROR,
-  MSG_READY, MSG_EVAL, MSG_ERROR, MSG_POSITION, MSG_STOP,
+  MSG_READY, MSG_EVAL, MSG_ERROR, MSG_POSITION,
   SEARCH_DEPTH,
 } from '../../src/constants.js';
 
@@ -150,31 +150,6 @@ describe('Engine', () => {
       const engine = new Engine();
       engine.analyze('test');
       expect(engine.currentFen).toBeNull();
-    });
-  });
-
-  describe('stop', () => {
-    it('posts MSG_STOP and sets state to ready', async () => {
-      const engine = new Engine();
-      await engine.init();
-      latestWorker.onmessage({ data: { type: MSG_READY } });
-      engine.analyze('fen1');
-
-      engine.stop();
-
-      expect(latestWorker.postMessage).toHaveBeenCalledWith({ type: MSG_STOP });
-      expect(engine.state).toBe('ready');
-      engine.destroy();
-    });
-
-    it('does not change state if not analyzing', async () => {
-      const engine = new Engine();
-      await engine.init();
-      latestWorker.onmessage({ data: { type: MSG_READY } });
-
-      engine.stop();
-      expect(engine.state).toBe('ready');
-      engine.destroy();
     });
   });
 
@@ -326,19 +301,6 @@ describe('Engine', () => {
       latestWorker.onmessage({ data: { type: MSG_READY } });
       expect(latestWorker.postMessage).toHaveBeenLastCalledWith({ type: MSG_POSITION, fen: 'fen2', depth: SEARCH_DEPTH });
       vi.useRealTimers();
-      engine.destroy();
-    });
-  });
-
-  describe('stop while starting', () => {
-    it('drops the queued position', async () => {
-      const engine = new Engine();
-      await engine.init();
-      engine.analyze('fen1');
-      engine.stop();
-      latestWorker.onmessage({ data: { type: MSG_READY } });
-      const positions = latestWorker.postMessage.mock.calls.filter((c) => c[0].type === MSG_POSITION);
-      expect(positions).toHaveLength(0);
       engine.destroy();
     });
   });
