@@ -73,6 +73,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             sections.push('');
             sections.push('--- Page State ---');
             sections.push(`URL: ${page.url}`);
+            if (page.error) sections.push(`Error: ${page.error}`);
             sections.push(`Engine: ${page.engineState}, FEN: ${page.engineFen || 'none'}`);
             sections.push(`Game over: ${page.gameOver}, Moves: ${page.moves}, Ply: ${page.ply}`);
             if (page.logs && page.logs.length > 0) {

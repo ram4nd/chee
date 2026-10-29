@@ -21,6 +21,13 @@ const State = Object.freeze({
 
 const MAX_RECOVER_ATTEMPTS = 2;
 
+function fetchOk(file) {
+  return fetch(chrome.runtime.getURL(file)).then((r) => {
+    if (!r.ok) throw new Error(`${file}: HTTP ${r.status}`);
+    return r;
+  });
+}
+
 export class Engine extends Emitter {
   constructor() {
     super();
@@ -31,6 +38,7 @@ export class Engine extends Emitter {
     this._recoverTimer = null;
     this._recoverAttempts = 0;
     this._recoverFen = null;
+    this._recovering = false;
   }
 
   get state() { return this._state; }
@@ -43,9 +51,9 @@ export class Engine extends Emitter {
 
     try {
       const [workerCode, sfCode, wasmBuf] = await Promise.all([
-        fetch(chrome.runtime.getURL(WORKER_FILE)).then((r) => r.text()),
-        fetch(chrome.runtime.getURL(STOCKFISH_JS_FILE)).then((r) => r.text()),
-        fetch(chrome.runtime.getURL(STOCKFISH_WASM_FILE)).then((r) => r.arrayBuffer()),
+        fetchOk(WORKER_FILE).then((r) => r.text()),
+        fetchOk(STOCKFISH_JS_FILE).then((r) => r.text()),
+        fetchOk(STOCKFISH_WASM_FILE).then((r) => r.arrayBuffer()),
       ]);
 
       log(
@@ -77,9 +85,9 @@ export class Engine extends Emitter {
       this._worker.onmessage = (e) => this._handleMessage(e.data);
 
       this._worker.onerror = (err) => {
-        log.error('worker onerror:', err.message, err);
+        // Recoverable: only giving up is reported as EVT_ERROR
+        log.warn('worker onerror:', err.message, err);
         this._state = State.ERROR;
-        this.emit(EVT_ERROR, 'Engine crashed — restarting...');
         this._autoRecover(settings);
       };
 
@@ -100,7 +108,8 @@ export class Engine extends Emitter {
   }
 
   analyze(fen) {
-    if (this._state === State.INITIALIZING) {
+    // Still starting, or restarting after a crash: run it once ready
+    if (this._state === State.INITIALIZING || this._recovering) {
       this._pendingFen = fen;
       return;
     }
@@ -113,6 +122,7 @@ export class Engine extends Emitter {
   }
 
   stop() {
+    this._pendingFen = null;
     if (this._worker) {
       this._worker.postMessage({ type: MSG_STOP });
       if (this._state === State.ANALYZING) {
@@ -132,7 +142,8 @@ export class Engine extends Emitter {
     this._currentFen = null;
   }
 
-  destroy() {
+  // Unloads the worker; listeners stay so init() can start it again
+  shutdown() {
     this._recovering = false;
     if (this._recoverTimer) { clearTimeout(this._recoverTimer); this._recoverTimer = null; }
     if (this._worker) {
@@ -142,13 +153,20 @@ export class Engine extends Emitter {
     this._state = State.IDLE;
     this._currentFen = null;
     this._pendingFen = null;
+    this._recoverAttempts = 0;
+    this._recoverFen = null;
+  }
+
+  destroy() {
+    this.shutdown();
     this.removeAllListeners();
   }
 
   _autoRecover(settings) {
     if (this._recovering) return;
     this._recovering = true;
-    const fen = this._currentFen;
+    // A crash before the engine was ready leaves the position queued rather than current
+    const fen = this._currentFen ?? this._pendingFen;
 
     if (fen === this._recoverFen) {
       this._recoverAttempts += 1;
@@ -159,7 +177,9 @@ export class Engine extends Emitter {
 
     if (this._recoverAttempts > MAX_RECOVER_ATTEMPTS) {
       log.error('giving up recovery after', MAX_RECOVER_ATTEMPTS, 'attempts for:', fen);
-      this._recovering = false;
+      this.shutdown();
+      this._state = State.ERROR;
+      this.emit(EVT_ERROR, 'Engine kept crashing');
       return;
     }
 

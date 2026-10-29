@@ -1,11 +1,12 @@
-// ReviewCoordinator: once a game is over, analyses every position in the move list,
-// draws the eval chart and points out the player's mistakes. Nothing runs during a live game.
+// ReviewCoordinator: once a game is over, analyses every position in the move list that is not
+// cached or already decided, draws the eval chart and points out the player's mistakes.
+// During a live game the engine is not loaded and no review is shown.
 
 import createDebug, { refreshDebugFlag } from '../lib/debug.js';
 import { LruCache } from '../lib/lru.js';
 import { applyTheme } from '../lib/themes.js';
 import {
-  buildPositions, whiteCp, findMistakes,
+  buildPositions, whiteCp, findMistakes, plyLabel,
 } from './review.js';
 import {
   DEBOUNCE_MS, EVT_EVAL, EVT_ERROR,
@@ -31,7 +32,9 @@ export class ReviewCoordinator {
     this._evals = [];
     this._pending = null; // index of the position being analysed
 
-    this._panel.onSeek = (ply) => this._adapter.jumpToPly(ply);
+    this._panel.onSeek = (ply) => {
+      if (!this._adapter.jumpToPly(ply)) log.warn('could not jump to ply', ply);
+    };
     this._bindEngineListeners();
   }
 
@@ -72,15 +75,17 @@ export class ReviewCoordinator {
   }
 
   sync() {
-    if (!this._ensureMounted()) return;
-
+    const mounted = this._ensureMounted();
+    // Lock even without a panel, so the engine never outlives a finished game
     if (!this._adapter.isGameOver()) {
       this._lock();
       return;
     }
+    if (!mounted) return;
     this._locked = false;
 
     const moves = this._adapter.readMoves();
+    if (moves.length === 0) return; // move list still rendering
     const key = moves.join(' ');
     if (key !== this._movesKey) this._loadGame(moves, key);
     this._render();
@@ -107,15 +112,35 @@ export class ReviewCoordinator {
     this._positions = [];
     this._evals = [];
     this._pending = null;
-    if (this._engineStarted) this._engine.stop();
+    this._stopEngine();
     this._adapter.markMoves(new Map());
-    this._panel.showLocked();
+    if (this._panel.isMounted()) this._panel.showLocked();
+  }
+
+  _stopEngine() {
+    if (!this._engineStarted) return;
+    this._engine.shutdown();
+    this._engineStarted = false;
   }
 
   _loadGame(moves, key) {
     log.info('reviewing', moves.length, 'moves');
     this._movesKey = key;
     this._positions = buildPositions(moves);
+    this._adapter.markMoves(new Map());
+
+    const replayed = this._positions.length - 1;
+    if (replayed < moves.length) {
+      // Variants, other start positions or unreadable move text: refuse rather than review part of the game
+      log.warn('could not replay move', replayed + 1, moves[replayed]);
+      this._positions = [];
+      this._evals = [];
+      this._pending = null;
+      this._stopEngine();
+      this._panel.showError(`Can't review this game: could not read move ${plyLabel(replayed + 1)} ${moves[replayed]}`);
+      return;
+    }
+
     this._evals = this._positions.map((p) => p.final || this._evalCache.get(this._cacheKey(p.fen)));
     if (!this._engineStarted) {
       this._engineStarted = true;
@@ -169,6 +194,18 @@ export class ReviewCoordinator {
   _bindEngineListeners() {
     // After a crash the engine itself resends the position it was analysing
     this._engine.on(EVT_EVAL, (data) => this._onEvalData(data));
-    this._engine.on(EVT_ERROR, (msg) => { log.error('Engine error:', msg); });
+    this._engine.on(EVT_ERROR, (msg) => this._onEngineError(msg));
+  }
+
+  // The engine gave up; offer a retry instead of waiting forever
+  _onEngineError(msg) {
+    log.error('Engine error:', msg);
+    this._pending = null;
+    this._stopEngine();
+    if (!this._panel.isMounted()) return;
+    this._panel.showError(`Engine unavailable: ${msg}`, () => {
+      this._movesKey = null;
+      this.sync();
+    });
   }
 }

@@ -25,7 +25,7 @@ const MSG_STOP = 'stop';
 const MSG_RECONFIGURE = 'reconfigure';
 
 // ─── State ───────────────────────────────────────────────────
-let currentScore = null; // { score, mate } of the deepest line seen
+let currentScore = null; // { score, mate } from the latest info line
 let currentDepth = 0;
 let analyzing = false;
 let stopped = false; // search was interrupted, so its result is not worth reporting
@@ -111,7 +111,7 @@ function onStockfishMessage(line) {
     if (reconfiguring) return;
     analyzing = false;
     // One message per finished search
-    if (currentScore && !stopped) {
+    if (!stopped && currentScore) {
       realPostMessage({
         type: MSG_EVAL,
         fen: activeFen,
@@ -119,6 +119,8 @@ function onStockfishMessage(line) {
         ...currentScore,
         bestmove: line.split(' ')[1] || null,
       });
+    } else if (!stopped) {
+      realPostMessage({ type: MSG_ERROR, message: `No score for ${activeFen}` });
     }
 
     // Sync engine state before starting queued analysis

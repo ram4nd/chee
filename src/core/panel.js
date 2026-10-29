@@ -2,6 +2,7 @@
 // eval chart, a summary of the player's mistakes and a clickable list of them.
 
 import { countBy } from 'lodash-es';
+import createDebug from '../lib/debug.js';
 import { el } from '../lib/dom.js';
 import { formatScore } from '../lib/format.js';
 import { ChartRenderer } from './renderers/chart-renderer.js';
@@ -9,7 +10,10 @@ import {
   PANEL_ID, SEVERITY_THRESHOLDS,
 } from '../constants.js';
 
+const log = createDebug('chee:panel');
+
 const TITLE = 'Chee review';
+const RETRY_TEXT = 'Retry';
 const LOCKED_TEXT = 'Hidden until the game ends';
 const NO_MISTAKES_TEXT = 'No mistakes found';
 const ANNOUNCE_CLASS = 'chee-announce';
@@ -27,6 +31,10 @@ export function summarize(mistakes) {
 export class Panel {
   constructor() {
     this._el = null;
+    this._statusEl = null;
+    this._toggleEl = null;
+    this._retryEl = null;
+    this._listEl = null;
     this._chart = new ChartRenderer();
     this.onSeek = null;
   }
@@ -50,15 +58,16 @@ export class Panel {
     this._toggleEl.addEventListener('click', () => {
       const minimized = !this._el.classList.contains('chee-minimized');
       this._setMinimized(minimized);
-      chrome.storage.sync.set({ panelMinimized: minimized });
+      chrome.storage.sync.set({ panelMinimized: minimized })
+        .catch((err) => log.warn('could not save panelMinimized:', err.message));
     });
     header.append(el('span', 'chee-title', TITLE), this._statusEl, this._toggleEl);
 
-    this._body = el('div', 'chee-body');
+    const body = el('div', 'chee-body');
     this._listEl = el('ul', 'chee-mistakes');
-    this._body.append(this._chart.createDOM(), this._listEl);
+    body.append(this._chart.createDOM(), this._listEl);
 
-    this._el.append(header, this._body);
+    this._el.append(header, body);
     beforeEl.before(this._el);
   }
 
@@ -66,17 +75,34 @@ export class Panel {
     this._setMinimized(minimized);
   }
 
+  // One of: locked, error, or the review itself (null)
+  _setState(state, status) {
+    this._el.classList.toggle('chee-locked', state === 'locked');
+    this._el.classList.toggle('chee-error', state === 'error');
+    this._statusEl.textContent = status;
+    this._retryEl?.remove();
+    this._retryEl = null;
+  }
+
   showLocked() {
-    this._el.classList.add('chee-locked');
-    this._statusEl.textContent = LOCKED_TEXT;
+    this._setState('locked', LOCKED_TEXT);
     this._listEl.replaceChildren();
     this._chart.render([], 0, 0);
     this._chart.setMarkers([]);
   }
 
   showProgress(done, total) {
-    this._el.classList.remove('chee-locked');
-    this._statusEl.textContent = `Analysing ${done}/${total}`;
+    this._setState(null, `Analysing ${done}/${total}`);
+  }
+
+  // A review that cannot be shown; onRetry adds a button to try again
+  showError(message, onRetry) {
+    this._setState('error', message);
+    this._listEl.replaceChildren();
+    if (!onRetry) return;
+    this._retryEl = el('button', 'chee-retry', RETRY_TEXT);
+    this._retryEl.addEventListener('click', onRetry);
+    this._toggleEl.before(this._retryEl);
   }
 
   render({ scores, total, cursor }) {
@@ -84,8 +110,7 @@ export class Panel {
   }
 
   showMistakes(mistakes) {
-    this._el.classList.remove('chee-locked');
-    this._statusEl.textContent = summarize(mistakes);
+    this._setState(null, summarize(mistakes));
     this._chart.setMarkers(mistakes);
     this._listEl.replaceChildren(...mistakes.map((m) => this._mistakeItem(m)));
 
@@ -124,6 +149,10 @@ export class Panel {
   destroy() {
     this._el?.remove();
     this._el = null;
+    this._statusEl = null;
+    this._toggleEl = null;
+    this._retryEl = null;
+    this._listEl = null;
     this._chart.destroy();
   }
 }

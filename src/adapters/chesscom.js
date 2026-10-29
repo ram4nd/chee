@@ -10,13 +10,14 @@ const SEL_MOVE_CONTENT = '.node-highlight-content';
 const SEL_SELECTED_MOVE = 'wc-simple-move-list .node-highlight-content.selected';
 const SEL_RESULT = 'wc-simple-move-list .game-result';
 const SEL_BOARD = 'wc-chess-board';
+const SEL_FIRST_MOVE_BUTTON = 'button[aria-label="First Move"]';
 // The sidebar scroll area that wraps the move list (play page, finished game page)
 const SEL_SCROLL_AREA = '.play-controller-scrollable, .game-tab-scrollable';
 const CLS_FLIPPED = 'flipped';
 const ATTR_GLYPH = 'cheeGlyph';
 
-// SAN tokens only: drops annotation icons and whitespace
-const NON_SAN = /[^A-Za-z0-9=+#-]/g;
+// SAN tokens only: drops annotation icons and whitespace; keeps @ so variant drops fail to replay
+const NON_SAN = /[^A-Za-z0-9=+#@-]/g;
 
 // Move text with piece icons (<span data-figurine="N">) turned back into letters
 function readSan(content) {
@@ -52,14 +53,20 @@ export class ChesscomAdapter {
     return board && board.classList.contains(CLS_FLIPPED) ? TURN_BLACK : TURN_WHITE;
   }
 
+  // chess.com highlights the shown move; nothing is highlighted at the start position
   detectPly() {
-    const nodes = this._nodes();
     const selected = document.querySelector(SEL_SELECTED_MOVE);
-    const index = indexOfNode(nodes, selected ? selected.closest('.node') : null);
-    return index >= 0 ? index + 1 : nodes.length;
+    return indexOfNode(this._nodes(), selected ? selected.closest('.node') : null) + 1;
   }
 
+  // Returns false when the page offers no way to get there
   jumpToPly(ply) {
+    if (ply === 0) {
+      const first = document.querySelector(SEL_FIRST_MOVE_BUTTON);
+      if (!first) return false;
+      first.click();
+      return true;
+    }
     const node = this._nodes()[ply - 1];
     if (!node) return false;
     (node.querySelector(SEL_MOVE_CONTENT) || node).click();

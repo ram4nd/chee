@@ -49,6 +49,23 @@ describe('ChesscomAdapter', () => {
     expect(adapter.isGameOver()).toBe(true);
   });
 
+  it('stays locked without a move list or with an empty result', () => {
+    document.body.innerHTML = '<span class="game-result">1-0</span>';
+    expect(adapter.isGameOver()).toBe(false);
+    render({ result: ' ' });
+    expect(adapter.isGameOver()).toBe(false);
+  });
+
+  it('reads castling and checks and ignores annotation icons', () => {
+    document.body.innerHTML = `<wc-simple-move-list>
+      ${node('white-move', 'O-O ')}
+      ${node('black-move', 'O-O-O<span class="annotation">?!</span> ')}
+      ${node('white-move', '<span data-figurine="Q"></span>xe5# ')}
+      <div class="node white-move"><span class="node-highlight-content">Nf3</span></div>
+    </wc-simple-move-list>`;
+    expect(adapter.readMoves()).toEqual(['O-O', 'O-O-O', 'Qxe5#']);
+  });
+
   it('uses the board orientation as the player colour', () => {
     render();
     expect(adapter.playerColor()).toBe(TURN_WHITE);
@@ -59,8 +76,8 @@ describe('ChesscomAdapter', () => {
   it('detects the shown ply from the selected move', () => {
     render({ selected: 1 });
     expect(adapter.detectPly()).toBe(2);
-    render();
-    expect(adapter.detectPly()).toBe(3);
+    render(); // nothing selected: the start position is shown
+    expect(adapter.detectPly()).toBe(0);
   });
 
   it('jumps to a ply by clicking its move', () => {
@@ -69,7 +86,21 @@ describe('ChesscomAdapter', () => {
     document.querySelectorAll('.node-highlight-content')[1].addEventListener('click', click);
     expect(adapter.jumpToPly(2)).toBe(true);
     expect(click).toHaveBeenCalled();
+  });
+
+  it('jumps to the start with the first-move button', () => {
+    render();
+    document.body.insertAdjacentHTML('beforeend', '<button aria-label="First Move"></button>');
+    const click = vi.fn();
+    document.querySelector('[aria-label="First Move"]').addEventListener('click', click);
+    expect(adapter.jumpToPly(0)).toBe(true);
+    expect(click).toHaveBeenCalled();
+  });
+
+  it('reports a jump it cannot make', () => {
+    render();
     expect(adapter.jumpToPly(0)).toBe(false);
+    expect(adapter.jumpToPly(9)).toBe(false);
   });
 
   it('mounts the panel above the scrolling move list', () => {

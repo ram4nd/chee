@@ -65,8 +65,23 @@
 }
 
 #chee-analysis-panel.chee-minimized .chee-body,
-#chee-analysis-panel.chee-locked .chee-body {
+#chee-analysis-panel.chee-locked .chee-body,
+#chee-analysis-panel.chee-error .chee-body {
   display: none;
+}
+
+#chee-analysis-panel.chee-error .chee-status {
+  color: var(--chee-mistake);
+}
+
+#chee-analysis-panel .chee-retry {
+  cursor: pointer;
+  padding: 1px 8px;
+  border: 1px solid var(--chee-surface1);
+  border-radius: 3px;
+  background: none;
+  color: var(--chee-text);
+  font-size: 11px;
 }
 
 #chee-analysis-panel.chee-locked .chee-status {

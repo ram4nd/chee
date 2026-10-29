@@ -17,6 +17,7 @@ beforeEach(() => {
   });
 
   vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({
+    ok: true,
     text: () => Promise.resolve('worker-code'),
     arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
   })));
@@ -256,7 +257,7 @@ describe('Engine', () => {
   });
 
   describe('_autoRecover', () => {
-    it('emits EVT_ERROR and attempts recovery on worker error', async () => {
+    it('recovers from a crash without reporting an error', async () => {
       const engine = new Engine();
       const errFn = vi.fn();
       engine.on(EVT_ERROR, errFn);
@@ -267,8 +268,8 @@ describe('Engine', () => {
 
       latestWorker.onerror({ message: 'crash' });
 
-      // autoRecover transitions state to idle and schedules re-init
-      expect(errFn).toHaveBeenCalled();
+      // A crash it can recover from is not reported as an error
+      expect(errFn).not.toHaveBeenCalled();
       expect(engine.state).toBe('idle');
       engine.destroy();
     });
@@ -301,10 +302,99 @@ describe('Engine', () => {
       // This crash should give up (attempt 3 > MAX_RECOVER_ATTEMPTS=2)
       w3.onerror({ message: 'crash3' });
 
-      // errFn should have been called multiple times
-      expect(errFn.mock.calls.length).toBeGreaterThanOrEqual(2);
+      // Only giving up is reported
+      expect(errFn).toHaveBeenCalledTimes(1);
 
       vi.useRealTimers();
+      engine.destroy();
+    });
+  });
+
+  describe('crash while starting', () => {
+    it('re-analyses the position queued before the engine was ready', async () => {
+      vi.useFakeTimers();
+      const engine = new Engine();
+      await engine.init();
+      engine.analyze('fen1'); // queued: engine not ready yet
+      latestWorker.onerror({ message: 'crash' });
+      await vi.advanceTimersByTimeAsync(1100);
+
+      latestWorker.onmessage({ data: { type: MSG_READY } });
+      expect(latestWorker.postMessage).toHaveBeenLastCalledWith({ type: MSG_POSITION, fen: 'fen1' });
+      vi.useRealTimers();
+      engine.destroy();
+    });
+
+    it('keeps a position requested while it restarts', async () => {
+      vi.useFakeTimers();
+      const engine = new Engine();
+      await engine.init();
+      latestWorker.onmessage({ data: { type: MSG_READY } });
+      engine.analyze('fen1');
+      latestWorker.onerror({ message: 'crash' });
+      engine.analyze('fen2');
+      await vi.advanceTimersByTimeAsync(1100);
+
+      latestWorker.onmessage({ data: { type: MSG_READY } });
+      expect(latestWorker.postMessage).toHaveBeenLastCalledWith({ type: MSG_POSITION, fen: 'fen2' });
+      vi.useRealTimers();
+      engine.destroy();
+    });
+  });
+
+  describe('stop while starting', () => {
+    it('drops the queued position', async () => {
+      const engine = new Engine();
+      await engine.init();
+      engine.analyze('fen1');
+      engine.stop();
+      latestWorker.onmessage({ data: { type: MSG_READY } });
+      const positions = latestWorker.postMessage.mock.calls.filter((c) => c[0].type === MSG_POSITION);
+      expect(positions).toHaveLength(0);
+      engine.destroy();
+    });
+  });
+
+  describe('shutdown', () => {
+    it('unloads the worker but keeps listeners so it can start again', async () => {
+      const engine = new Engine();
+      const ready = vi.fn();
+      engine.on(EVT_READY, ready);
+      await engine.init();
+      const w = latestWorker;
+      engine.analyze('fen1');
+
+      engine.shutdown();
+      expect(w.terminate).toHaveBeenCalled();
+      expect(engine.state).toBe('idle');
+
+      await engine.init();
+      expect(latestWorker).not.toBe(w);
+      latestWorker.onmessage({ data: { type: MSG_READY } });
+      expect(ready).toHaveBeenCalledTimes(1);
+      const positions = latestWorker.postMessage.mock.calls.filter((c) => c[0].type === MSG_POSITION);
+      expect(positions).toHaveLength(0);
+      engine.destroy();
+    });
+  });
+
+  describe('init', () => {
+    it('loads the wasm through the worker URL hash', async () => {
+      const engine = new Engine();
+      await engine.init();
+      expect(Worker).toHaveBeenLastCalledWith('blob:mock#stockfish.wasm');
+      engine.destroy();
+    });
+
+    it('reports a resource that failed to load', async () => {
+      fetch.mockImplementation(() => Promise.resolve({
+        ok: false, status: 404, text: () => Promise.resolve(''), arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+      }));
+      const engine = new Engine();
+      const errFn = vi.fn();
+      engine.on(EVT_ERROR, errFn);
+      await engine.init();
+      expect(errFn).toHaveBeenCalledWith(expect.stringContaining('HTTP 404'));
       engine.destroy();
     });
   });

@@ -76,8 +76,8 @@ Line endings are enforced as LF on all platforms via `.gitattributes`.
 **Core modules:**
 - `core/review.js` — pure logic: `buildPositions()` (chess.js replay, checkmate/stalemate scored without the engine), `whiteCp()`, `winChance()` (lichess curve), `findMistakes()` (inaccuracy/mistake/blunder by drop in winning chances, see `SEVERITY_THRESHOLDS`), `uciToSan()`.
 - `core/coordinator.js` — `ReviewCoordinator`: locks the panel while the game is live; after it ends, analyses each position in turn (one at a time), caches results in an LRU keyed by `fen|depth`, then reports the player's mistakes.
-- `core/engine.js` — Stockfish worker lifecycle (state machine: IDLE→INITIALIZING→READY→ANALYZING), worker posts one `{fen, depth, score, mate, bestmove}` per finished search (interrupted searches are not reported); auto-recovery with max 2 retry attempts per crashing position.
-- `core/panel.js` — panel inserted before the sidebar's move list scroll area: header (status, minimize), eval chart, mistake list. Clicking a mistake jumps to the position before it; "Best move?" reveals the engine move.
+- `core/engine.js` — Stockfish worker lifecycle (state machine: IDLE→INITIALIZING→READY→ANALYZING, plus ERROR), worker posts one `{fen, depth, score, mate, bestmove}` per finished search (interrupted searches are not reported); auto-recovery with max 2 retry attempts per crashing position; only giving up emits `EVT_ERROR`. `shutdown()` unloads the worker but keeps listeners so `init()` can start it again.
+- `core/panel.js` — panel inserted before the sidebar's move list scroll area: header (status, retry on error, minimize), eval chart, mistake list. Clicking a mistake jumps to the position before it; "Best move?" reveals the engine move.
 - `core/renderers/chart-renderer.js` — SVG eval chart with HTML cursor and mistake markers; click to jump to a ply.
 
 **Shared utilities** (`lib/`):
@@ -87,7 +87,7 @@ Line endings are enforced as LF on all platforms via `.gitattributes`.
 - `lib/format.js` — `formatCp()`, `formatScore()`
 - `lib/lru.js` — LRU cache for eval results
 - `lib/themes.js` — Catppuccin theme application
-- `lib/settings.js` — Chrome storage load/save
+- `lib/settings.js` — Chrome storage load (falls back to defaults) and `normalizeSettings()` (restores defaults for removed keys, snaps depth to `SEARCH_DEPTHS`)
 
 **Flow:** MutationObserver on the page → 100ms debounce → if no result row: lock (engine stopped, marks cleared) → else read moves → positions → analyse missing ones → chart fills in → mistakes listed, chart markers and move-list glyphs added.
 
@@ -115,14 +115,15 @@ Line endings are enforced as LF on all platforms via `.gitattributes`.
 
 ### Never show analysis during a live game
 
-The only unlock signal is chess.com's result row (`wc-simple-move-list .game-result`). Fail closed: no move list or no result means locked, and the engine is not even initialised until the first finished game.
+The only unlock signal is chess.com's result row (`wc-simple-move-list .game-result`). Fail closed: no move list or no result means locked. The engine is only loaded while a finished game is being reviewed; locking calls `engine.shutdown()`, so no worker exists during a live game. Games that cannot be replayed from the standard start (variants, unreadable move text) are refused with an error instead of reviewing part of the game. Engine failures show an error with a Retry button.
 
 ### chess.com DOM structure (as of 2026)
 
-- Move list: `wc-simple-move-list` → `.main-line-row` → `.node.white-move` / `.node.black-move` → `span.node-highlight-content` (`.selected` on active move). Piece letters are icons: `<span data-figurine="N">`.
+- Move list: `wc-simple-move-list` → `.main-line-row` → `.node.main-line-ply` (`.white-move` / `.black-move`; variations lack `.main-line-ply`) → `span.node-highlight-content` (`.selected` on active move). Piece letters are icons: `<span data-figurine="N">`.
 - Result: `.main-line-row.result-row > .game-result` (`1-0`, `0-1`, `½-½`) once the game ends
 - Sidebar scroll area wrapping the move list: `.play-controller-scrollable` (play pages), `.game-tab-scrollable` (finished game pages)
 - Board: `wc-chess-board`, `.flipped` when the player is black
+- Start position: `button[aria-label="First Move"]` (used to jump to ply 0)
 
 ### Debug logging
 
@@ -132,7 +133,7 @@ The only unlock signal is chess.com's result row (`wc-simple-move-list .game-res
 
 ## Eval Chart
 
-SVG area chart plotting white-perspective eval at each ply. White area fills from bottom up to the score line (more white = white winning). Dark background = black's territory. Orange cursor line marks current ply. Scores clamped to ±500cp on the chart, mate = ±500. Fills in as positions are analysed. Hover shows move number and score; click jumps the board to that ply. Coloured dots mark the player's mistakes.
+SVG area chart plotting white-perspective eval at each ply. White area fills from bottom up to the score line (more white = white winning). Dark background = black's territory. Orange cursor line marks current ply. Scores are drawn clamped to ±500cp (`CHART_MAX_CP`); mate is stored as ±`MATE_CP` (1000) and other scores are capped at ±999, so only mate shows as "M". Fills in as positions are analysed. Hover shows move number and score; click jumps the board to that ply. Coloured dots mark the player's mistakes.
 
 ## Theme System
 

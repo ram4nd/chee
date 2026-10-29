@@ -4,7 +4,7 @@ import {
 import { ReviewCoordinator } from '../../src/core/coordinator.js';
 import { buildPositions } from '../../src/core/review.js';
 import {
-  TURN_WHITE, TURN_BLACK, EVT_EVAL, SEVERITY_BLUNDER,
+  TURN_WHITE, TURN_BLACK, EVT_EVAL, EVT_ERROR, SEVERITY_BLUNDER,
 } from '../../src/constants.js';
 
 beforeEach(() => {
@@ -23,6 +23,7 @@ function makeEngine() {
     init: vi.fn(),
     analyze: vi.fn(),
     stop: vi.fn(),
+    shutdown: vi.fn(),
     reconfigure: vi.fn(),
     destroy: vi.fn(),
     on: vi.fn((evt, fn) => { handlers[evt] = fn; }),
@@ -39,6 +40,7 @@ function makePanel() {
     showLocked: vi.fn(),
     showProgress: vi.fn(),
     showMistakes: vi.fn(),
+    showError: vi.fn(),
     render: vi.fn(),
     destroy: vi.fn(),
   };
@@ -151,9 +153,73 @@ describe('ReviewCoordinator', () => {
     adapter.over = false;
     adapter.moves = [];
     coordinator.sync();
-    expect(engine.stop).toHaveBeenCalled();
+    expect(engine.shutdown).toHaveBeenCalled();
     expect(panel.showLocked).toHaveBeenCalled();
     expect(adapter.markMoves).toHaveBeenLastCalledWith(new Map());
+  });
+
+  it('unloads the engine on lock and starts it again for the next review', () => {
+    const { engine, adapter, coordinator } = setup(['e4']);
+    coordinator.sync();
+    adapter.over = false;
+    coordinator.sync();
+    adapter.over = true;
+    coordinator.sync();
+    expect(engine.init).toHaveBeenCalledTimes(2);
+  });
+
+  it('reuses cached results when the same game is reviewed again', () => {
+    const {
+      engine, panel, adapter, coordinator,
+    } = setup(['e4']);
+    coordinator.sync();
+    reply(engine, { score: 30, bestmove: 'e2e4' });
+    reply(engine, { score: -30, bestmove: 'e7e5' });
+    adapter.over = false;
+    coordinator.sync();
+    adapter.over = true;
+    coordinator.sync();
+    expect(engine.analyze).toHaveBeenCalledTimes(2);
+    expect(panel.showMistakes).toHaveBeenCalledTimes(2);
+  });
+
+  it('locks even before the panel can be mounted', () => {
+    const { engine, adapter, coordinator } = setup(['e4']);
+    coordinator.sync();
+    adapter.over = false;
+    adapter.getMountPoint.mockReturnValue(null);
+    coordinator._panel.mounted = false;
+    coordinator.sync();
+    expect(engine.shutdown).toHaveBeenCalled();
+    expect(adapter.markMoves).toHaveBeenLastCalledWith(new Map());
+  });
+
+  it('waits while the finished game\'s move list is still empty', () => {
+    const { engine, panel, coordinator } = setup([]);
+    coordinator.sync();
+    expect(engine.init).not.toHaveBeenCalled();
+    expect(panel.showMistakes).not.toHaveBeenCalled();
+  });
+
+  it('refuses a game it cannot replay instead of showing a partial review', () => {
+    const { engine, panel, coordinator } = setup(['e4', 'N@e5']);
+    coordinator.sync();
+    expect(engine.init).not.toHaveBeenCalled();
+    expect(panel.showError).toHaveBeenCalledWith(expect.stringContaining('1... N@e5'));
+    expect(panel.showMistakes).not.toHaveBeenCalled();
+  });
+
+  it('shows an engine failure and can retry', () => {
+    const { engine, panel, coordinator } = setup(['e4']);
+    coordinator.sync();
+    engine.handlers[EVT_ERROR]('Init failed');
+    expect(engine.shutdown).toHaveBeenCalled();
+    const [message, retry] = panel.showError.mock.calls.at(-1);
+    expect(message).toContain('Init failed');
+
+    retry();
+    expect(engine.init).toHaveBeenCalledTimes(2);
+    expect(engine.analyze).toHaveBeenCalledTimes(2);
   });
 
   it('jumps the board when the panel asks to seek', () => {

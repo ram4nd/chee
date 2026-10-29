@@ -29,9 +29,16 @@ describe('buildPositions', () => {
   });
 
   it('scores stalemate as a draw', () => {
-    const fen = 'k7/8/8/1Q6/8/8/8/7K w - - 0 1';
-    expect(buildPositions(['Kg2'], fen)[1].final).toBeNull();
-    expect(buildPositions(['Qb6'], fen)[1].final).toEqual({ whiteCp: 0 });
+    // Fastest known stalemate
+    const moves = 'e3 a5 Qh5 Ra6 Qxa5 h5 h4 Rah6 Qxc7 f6 Qxd7+ Kf7 Qxb7 Qd3 Qxb8 Qh7 Qxc8 Kg6 Qe6'.split(' ');
+    const positions = buildPositions(moves);
+    expect(positions).toHaveLength(20);
+    expect(positions[19].final).toEqual({ whiteCp: 0 });
+  });
+
+  it('scores threefold repetition as a draw', () => {
+    const positions = buildPositions(['Nf3', 'Nf6', 'Ng1', 'Ng8', 'Nf3', 'Nf6', 'Ng1', 'Ng8']);
+    expect(positions[8].final).toEqual({ whiteCp: 0 });
   });
 });
 
@@ -39,6 +46,11 @@ describe('whiteCp', () => {
   it('flips the score when black is to move', () => {
     expect(whiteCp({ score: 50, mate: null }, TURN_WHITE)).toBe(50);
     expect(whiteCp({ score: 50, mate: null }, TURN_BLACK)).toBe(-50);
+  });
+
+  it('keeps large normal scores below the mate score', () => {
+    expect(whiteCp({ score: 5000, mate: null }, TURN_WHITE)).toBe(MATE_CP - 1);
+    expect(whiteCp({ score: 5000 }, TURN_BLACK)).toBe(-(MATE_CP - 1));
   });
 
   it('turns a mate score into a large score for the mating side', () => {
@@ -101,6 +113,19 @@ describe('findMistakes', () => {
     expect(grade(-120)).toBe(SEVERITY_INACCURACY);
     expect(grade(-250)).toBe(SEVERITY_MISTAKE);
     expect(grade(-500)).toBe(SEVERITY_BLUNDER);
+  });
+
+  it('does not grade a move when the engine move cannot be read', () => {
+    const p = buildPositions(['e4']);
+    expect(findMistakes(p, [{ whiteCp: 0, bestmove: 'e2e5' }, { whiteCp: -500 }], TURN_WHITE)).toEqual([]);
+  });
+
+  it('grades at the exact thresholds', () => {
+    const p = buildPositions(['e4']);
+    // Just either side of the 30-point blunder line
+    const grade = (after) => findMistakes(p, [{ whiteCp: 0, bestmove: 'd2d4' }, { whiteCp: after }], TURN_WHITE)[0]?.severity;
+    expect(grade(-370)).toBe(SEVERITY_MISTAKE);
+    expect(grade(-380)).toBe(SEVERITY_BLUNDER);
   });
 
   it('skips plies that are not analysed yet and moves equal to the best move', () => {

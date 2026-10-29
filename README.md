@@ -1,6 +1,6 @@
 # Chee
 
-Game review for chess.com, powered by Stockfish WASM. Once your game ends, a panel above the move list shows the eval chart and your mistakes. Nothing is shown and no engine runs while the game is in progress, so it stays within fair-play rules.
+Game review for chess.com, powered by Stockfish WASM. Once your game ends, a panel above the move list shows the eval chart and your mistakes. Nothing is shown and the engine is not loaded while the game is in progress, so it stays within fair-play rules.
 
 ## Setup
 
@@ -39,7 +39,7 @@ localStorage.debug = 'chee:*'
 - Eval chart of the whole game: hover for scores, click to jump to a move, dots on your mistakes
 - Your inaccuracies (?!), mistakes (?) and blunders (??) listed and marked in the move list
 - Click a mistake to see the position before it and look for the better move; "Best move?" reveals the engine's choice
-- Configurable search depth (12–20)
+- Search depth of 12, 15, 18 or 20
 - Catppuccin theme system (Latte, Frappé, Macchiato, Mocha) + site-matching mode
 - Copy debug info from the popup for troubleshooting
 

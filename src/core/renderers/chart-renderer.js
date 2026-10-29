@@ -79,7 +79,7 @@ export class ChartRenderer {
     this._chartWhite.setAttribute('d', d ? `${d} L ${lastX} ${CHART_VB_H} Z` : '');
 
     this._cursor.style.display = total > 0 ? 'block' : 'none';
-    this._cursor.style.left = `${this._xPct(cursor)}%`;
+    this._cursor.style.left = `${this._xPct(clamp(cursor, 0, Math.max(total - 1, 0)))}%`;
   }
 
   // mistakes: [{ ply, severity, after }]

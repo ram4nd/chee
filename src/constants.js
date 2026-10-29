@@ -26,6 +26,8 @@ export const MSG_RECONFIGURE = 'reconfigure';
 
 // ─── Engine config ───────────────────────────────────────────
 export const SEARCH_DEPTH = 15;
+// Depths offered in the popup; stored values are snapped to the nearest one
+export const SEARCH_DEPTHS = [12, 15, 18, 20];
 export const SETTINGS_DEFAULTS = {
   searchDepth: SEARCH_DEPTH,
   theme: 'site',
@@ -40,7 +42,7 @@ export const MATE_PREFIX = 'M';
 export const MATE_NEG_PREFIX = '-M';
 
 // ─── Review ──────────────────────────────────────────────────
-// Scores are capped here before computing winning chances, like lichess
+// Mate is scored as ±MATE_CP; other scores are capped just below it (like lichess) so only mates reach it
 export const MATE_CP = 1000;
 export const SEVERITY_INACCURACY = 'inaccuracy';
 export const SEVERITY_MISTAKE = 'mistake';
